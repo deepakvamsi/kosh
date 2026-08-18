@@ -3,9 +3,11 @@ import { api } from '../api'
 import { SecretSummary, AddSecretInput, AddKeyPairInput, Provider, RevealedItem, ItemType } from '../types'
 import { Plus, Search, Eye, EyeOff, Copy, Trash2, Archive, RotateCcw, KeyRound, Link2, User, FileText } from 'lucide-react'
 import CustomFieldsPanel from '../components/CustomFieldsPanel'
+import StrengthBar from '../components/StrengthBar'
 
 type RevealState = { alias: string; item: RevealedItem; timer: ReturnType<typeof setTimeout> | null }
 type AddMode = 'single' | 'keypair'
+type AddTab = ItemType | 'keypair'
 
 const ITEM_META: Record<ItemType, { label: string; Icon: typeof KeyRound }> = {
   api_key:     { label: 'API key', Icon: KeyRound },
@@ -130,27 +132,21 @@ export default function SecretsView() {
           Archived
         </label>
 
-        <div className="flex items-center gap-2">
-          <button onClick={() => setAddMode('single')}
-            className="flex items-center gap-2 rounded-lg bg-[rgb(var(--accent))] px-3 py-2 text-sm font-medium text-white hover:bg-[rgb(var(--accent-hover))] transition-colors">
-            <Plus className="h-4 w-4" /> Add Secret
-          </button>
-          <button onClick={() => setAddMode('keypair')}
-            title="Add Access Key + Secret Key pair (AWS-style)"
-            className="flex items-center gap-2 rounded-lg border border-[rgb(var(--accent)/0.5)] px-3 py-2 text-sm font-medium text-[rgb(var(--accent))] hover:bg-[rgb(var(--accent)/0.08)] transition-colors">
-            <KeyRound className="h-4 w-4" /> Key Pair
-          </button>
-        </div>
+        <button onClick={() => setAddMode('single')}
+          className="flex items-center gap-2 rounded-lg bg-[rgb(var(--accent))] px-4 py-2 text-sm font-medium text-white hover:bg-[rgb(var(--accent-hover))] transition-colors">
+          <Plus className="h-4 w-4" /> Add
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {secrets.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-4 text-sm text-[rgb(var(--text-muted))]">
             <KeyRound className="h-10 w-10 opacity-20" />
-            <div className="text-center">
-              <p className="font-medium">No secrets yet</p>
-              <p className="text-xs mt-1">Use "Add Secret" for a single key, or "Key Pair" for Access Key + Secret Key (AWS, etc.)</p>
-            </div>
+            <p className="font-medium text-[rgb(var(--text))]">Your vault is empty</p>
+            <button onClick={() => setAddMode('single')}
+              className="flex items-center gap-2 rounded-lg bg-[rgb(var(--accent))] px-4 py-2 text-sm font-medium text-white hover:bg-[rgb(var(--accent-hover))]">
+              <Plus className="h-4 w-4" /> Add your first secret
+            </button>
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -236,11 +232,8 @@ export default function SecretsView() {
         )}
       </div>
 
-      {addMode === 'single' && (
-        <AddSecretModal providers={providers} onClose={() => setAddMode(null)} onSaved={load} />
-      )}
-      {addMode === 'keypair' && (
-        <AddKeyPairModal providers={providers} onClose={() => setAddMode(null)} onSaved={load} />
+      {addMode !== null && (
+        <AddModal providers={providers} onClose={() => setAddMode(null)} onSaved={load} />
       )}
     </div>
   )
@@ -300,129 +293,204 @@ function RevealedFields({ item, onCopy, copied }: {
   )
 }
 
-function AddSecretModal({ providers, onClose, onSaved }: { providers: Provider[]; onClose: () => void; onSaved: () => void }) {
-  const [itemType, setItemType] = useState<ItemType>('api_key')
+// AddModal is the single entry point for creating any vault item: API key, login, key
+// pair, or secure note. One button, four tabs — the fields and the save action switch on
+// the selected tab.
+function AddModal({ providers, onClose, onSaved }: { providers: Provider[]; onClose: () => void; onSaved: () => void }) {
+  const [mode, setMode] = useState<AddTab>('api_key')
   const [form, setForm] = useState<AddSecretInput>({ alias: '', providerKey: providers[0]?.key ?? 'openai', environment: 'dev', description: '', value: '', username: '', password: '', note: '' })
   const [showVal, setShowVal] = useState(false)
   const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Key-pair tab state (creates two linked secrets via addKeyPair).
+  const [kpProvider, setKpProvider] = useState(providers.find(p => p.key === 'aws')?.key ?? providers[0]?.key ?? 'aws')
+  const [kpService, setKpService] = useState('')
+  const [kpEnv, setKpEnv] = useState('dev')
+  const [kpDesc, setKpDesc] = useState('')
+  const [kpAccess, setKpAccess] = useState('')
+  const [kpSecret, setKpSecret] = useState('')
+  const [showAK, setShowAK] = useState(false)
+  const [showSK, setShowSK] = useState(false)
+
   const inputCls = 'rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--bg))] px-3 py-2 text-sm text-[rgb(var(--text))] outline-none focus:border-[rgb(var(--accent))]'
   const set = (k: keyof AddSecretInput) => (e: { target: { value: string } }) => setForm(f => ({ ...f, [k]: e.target.value }))
 
+  const normalize = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
+  const kpBase = [normalize(providers.find(p => p.key === kpProvider)?.name ?? kpProvider), normalize(kpService), kpEnv.toUpperCase()].filter(Boolean).join('_')
+  const kpAccessAlias = kpBase ? `${kpBase}_ACCESS_KEY` : 'PROVIDER_SERVICE_ENV_ACCESS_KEY'
+  const kpSecretAlias = kpBase ? `${kpBase}_SECRET_KEY` : 'PROVIDER_SERVICE_ENV_SECRET_KEY'
+
   async function submit(e: React.FormEvent) {
     e.preventDefault()
+    setError('')
+
+    if (mode === 'keypair') {
+      if (!kpService) { setError('Service / purpose is required (e.g. Bedrock, IAM)'); return }
+      if (!kpAccess) { setError('Access key is required'); return }
+      if (!kpSecret) { setError('Secret key is required'); return }
+      setLoading(true)
+      try {
+        const input: AddKeyPairInput = {
+          accessKeyAlias: kpAccessAlias, accessKeyValue: kpAccess,
+          secretKeyAlias: kpSecretAlias, secretKeyValue: kpSecret,
+          providerKey: kpProvider, environment: kpEnv,
+          description: kpDesc || `${providers.find(p => p.key === kpProvider)?.name ?? kpProvider} ${kpService} ${kpEnv}`,
+        }
+        const res = await api.addKeyPair(input)
+        if (res.err) setError(res.err)
+        else { onSaved(); onClose() }
+      } catch (e: any) { setError(String(e)) }
+      finally { setLoading(false) }
+      return
+    }
+
     if (!form.alias) { setError('Alias is required'); return }
-    if (itemType === 'api_key' && !form.value) { setError('A secret value is required'); return }
-    if (itemType === 'login' && (!form.username || !form.password)) { setError('Username and password are required'); return }
-    if (itemType === 'secure_note' && !form.note) { setError('Note body is required'); return }
+    if (mode === 'api_key' && !form.value) { setError('A secret value is required'); return }
+    if (mode === 'login' && (!form.username || !form.password)) { setError('Username and password are required'); return }
+    if (mode === 'secure_note' && !form.note) { setError('Note body is required'); return }
     setLoading(true)
     try {
-      const res = await api.addSecret({ ...form, itemType })
+      const res = await api.addSecret({ ...form, itemType: mode })
       if (res.err) setError(res.err)
       else { onSaved(); onClose() }
     } catch (e: any) { setError(String(e)) }
     finally { setLoading(false) }
   }
 
-  const TABS: { type: ItemType; label: string; Icon: typeof KeyRound }[] = [
-    { type: 'api_key',     label: 'API key', Icon: KeyRound },
-    { type: 'login',       label: 'Login',   Icon: User },
-    { type: 'secure_note', label: 'Note',    Icon: FileText },
+  const TABS: { type: AddTab; label: string; Icon: typeof KeyRound }[] = [
+    { type: 'api_key',     label: 'API key',  Icon: KeyRound },
+    { type: 'login',       label: 'Login',    Icon: User },
+    { type: 'keypair',     label: 'Key pair', Icon: Link2 },
+    { type: 'secure_note', label: 'Note',     Icon: FileText },
   ]
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] p-6 shadow-2xl">
-        <h2 className="mb-4 text-base font-semibold">Add Item</h2>
+      <div className="w-full max-w-lg rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] p-6 shadow-2xl">
+        <h2 className="mb-4 text-base font-semibold">Add</h2>
 
-        {/* Item-type selector */}
-        <div className="mb-4 grid grid-cols-3 gap-2">
+        <div className="mb-4 grid grid-cols-4 gap-2">
           {TABS.map(({ type, label, Icon }) => (
-            <button key={type} type="button" onClick={() => { setItemType(type); setError('') }}
-              className={`flex flex-col items-center gap-1 rounded-lg border px-2 py-2.5 text-xs font-medium transition-colors ${itemType === type ? 'border-[rgb(var(--accent))] bg-[rgb(var(--accent)/0.1)] text-[rgb(var(--accent))]' : 'border-[rgb(var(--border))] text-[rgb(var(--text-muted))] hover:bg-white/5'}`}>
+            <button key={type} type="button" onClick={() => { setMode(type); setError('') }}
+              className={`flex flex-col items-center gap-1 rounded-lg border px-2 py-2.5 text-xs font-medium transition-colors ${mode === type ? 'border-[rgb(var(--accent))] bg-[rgb(var(--accent)/0.1)] text-[rgb(var(--accent))]' : 'border-[rgb(var(--border))] text-[rgb(var(--text-muted))] hover:bg-white/5'}`}>
               <Icon className="h-4 w-4" /> {label}
             </button>
           ))}
         </div>
 
         <form onSubmit={submit} className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
-            Alias
-            <input value={form.alias} onChange={set('alias')}
-              placeholder={itemType === 'login' ? 'GITHUB_ACCOUNT' : itemType === 'secure_note' ? 'RECOVERY_CODES' : 'MY_API_KEY'}
-              className={inputCls} />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
-            Description
-            <input value={form.description} onChange={set('description')} placeholder="Optional" className={inputCls} />
-          </label>
-
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
-              {itemType === 'login' ? 'Service' : 'Provider'}
-              <select value={form.providerKey} onChange={set('providerKey')}
-                className={inputCls}>
-                {providers.map(p => <option key={p.key} value={p.key}>{p.name}</option>)}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
-              Environment
-              <select value={form.environment} onChange={set('environment')}
-                className={inputCls}>
-                {['dev','qa','staging','prod'].map(v => <option key={v} value={v}>{v}</option>)}
-              </select>
-            </label>
-          </div>
-
-          {itemType === 'api_key' && (
-            <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
-              Secret Value
-              <div className="relative">
-                <input type={showVal ? 'text' : 'password'} value={form.value} onChange={set('value')} placeholder="sk-…"
-                  className={`w-full pr-10 ${inputCls}`} />
-                <button type="button" onClick={() => setShowVal(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-[rgb(var(--text-muted))]">
-                  {showVal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+          {mode === 'keypair' ? (
+            <>
+              <div className="grid grid-cols-3 gap-3">
+                <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
+                  Provider
+                  <select value={kpProvider} onChange={e => { setKpProvider(e.target.value); setKpService('') }} className={inputCls}>
+                    {providers.map(p => <option key={p.key} value={p.key}>{p.name}</option>)}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
+                  Service
+                  <input value={kpService} onChange={e => setKpService(e.target.value)} placeholder="Bedrock, IAM…" className={inputCls} />
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
+                  Environment
+                  <select value={kpEnv} onChange={e => setKpEnv(e.target.value)} className={inputCls}>
+                    {['dev','qa','staging','prod'].map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </label>
               </div>
-            </label>
-          )}
-
-          {itemType === 'login' && (
+              <div className="flex gap-2">
+                <code className="flex-1 truncate rounded bg-[rgb(var(--accent)/0.1)] px-2.5 py-1.5 font-mono text-xs text-[rgb(var(--accent))]">{kpAccessAlias}</code>
+                <code className="flex-1 truncate rounded bg-[rgb(var(--accent)/0.1)] px-2.5 py-1.5 font-mono text-xs text-[rgb(var(--accent))]">{kpSecretAlias}</code>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
+                  Access key
+                  <div className="relative">
+                    <input type={showAK ? 'text' : 'password'} value={kpAccess} onChange={e => setKpAccess(e.target.value)} placeholder="AKIA…" className={`w-full pr-9 font-mono ${inputCls}`} />
+                    <button type="button" onClick={() => setShowAK(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-[rgb(var(--text-muted))]">{showAK ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+                  </div>
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
+                  Secret key
+                  <div className="relative">
+                    <input type={showSK ? 'text' : 'password'} value={kpSecret} onChange={e => setKpSecret(e.target.value)} placeholder="wJal…" className={`w-full pr-9 font-mono ${inputCls}`} />
+                    <button type="button" onClick={() => setShowSK(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-[rgb(var(--text-muted))]">{showSK ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+                  </div>
+                </label>
+              </div>
+            </>
+          ) : (
             <>
               <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
-                Username
-                <input value={form.username} onChange={set('username')} placeholder="you@example.com"
-                  autoComplete="off" className={inputCls} />
+                Alias
+                <input value={form.alias} onChange={set('alias')}
+                  placeholder={mode === 'login' ? 'GITHUB_ACCOUNT' : mode === 'secure_note' ? 'RECOVERY_CODES' : 'MY_API_KEY'}
+                  className={inputCls} />
               </label>
               <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
-                Password
-                <div className="relative">
-                  <input type={showPw ? 'text' : 'password'} value={form.password} onChange={set('password')} placeholder="••••••••"
-                    autoComplete="new-password" className={`w-full pr-10 ${inputCls}`} />
-                  <button type="button" onClick={() => setShowPw(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-[rgb(var(--text-muted))]">
-                    {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
+                Description
+                <input value={form.description} onChange={set('description')} placeholder="Optional" className={inputCls} />
               </label>
-              <p className="text-[10px] text-[rgb(var(--text-muted))]">Both the username and password are encrypted; neither is stored in the clear.</p>
-            </>
-          )}
 
-          {itemType === 'secure_note' && (
-            <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
-              Note
-              <textarea value={form.note} onChange={set('note')} rows={5} placeholder="Anything sensitive — recovery codes, connection strings, private notes…"
-                className={`resize-y ${inputCls}`} />
-            </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
+                  {mode === 'login' ? 'Service' : 'Provider'}
+                  <select value={form.providerKey} onChange={set('providerKey')} className={inputCls}>
+                    {providers.map(p => <option key={p.key} value={p.key}>{p.name}</option>)}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
+                  Environment
+                  <select value={form.environment} onChange={set('environment')} className={inputCls}>
+                    {['dev','qa','staging','prod'].map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </label>
+              </div>
+
+              {mode === 'api_key' && (
+                <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
+                  Secret value
+                  <div className="relative">
+                    <input type={showVal ? 'text' : 'password'} value={form.value} onChange={set('value')} placeholder="sk-…" className={`w-full pr-10 ${inputCls}`} />
+                    <button type="button" onClick={() => setShowVal(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-[rgb(var(--text-muted))]">{showVal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+                  </div>
+                </label>
+              )}
+
+              {mode === 'login' && (
+                <>
+                  <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
+                    Username
+                    <input value={form.username} onChange={set('username')} placeholder="you@example.com" autoComplete="off" className={inputCls} />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
+                    Password
+                    <div className="relative">
+                      <input type={showPw ? 'text' : 'password'} value={form.password} onChange={set('password')} placeholder="••••••••" autoComplete="new-password" className={`w-full pr-10 ${inputCls}`} />
+                      <button type="button" onClick={() => setShowPw(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-[rgb(var(--text-muted))]">{showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+                    </div>
+                  </label>
+                  <StrengthBar value={form.password ?? ''} />
+                </>
+              )}
+
+              {mode === 'secure_note' && (
+                <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
+                  Note
+                  <textarea value={form.note} onChange={set('note')} rows={5} placeholder="Recovery codes, connection strings, private notes…" className={`resize-y ${inputCls}`} />
+                </label>
+              )}
+            </>
           )}
 
           {error && <p className="text-xs text-[rgb(var(--danger))]">{error}</p>}
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-[rgb(var(--border))] py-2.5 text-sm hover:bg-white/5">Cancel</button>
             <button type="submit" disabled={loading} className="flex-1 rounded-lg bg-[rgb(var(--accent))] py-2.5 text-sm font-medium text-white hover:bg-[rgb(var(--accent-hover))] disabled:opacity-50">
-              {loading ? 'Saving…' : 'Save'}
+              {loading ? 'Saving…' : mode === 'keypair' ? 'Save both keys' : 'Save'}
             </button>
           </div>
         </form>
@@ -431,153 +499,3 @@ function AddSecretModal({ providers, onClose, onSaved }: { providers: Provider[]
   )
 }
 
-function AddKeyPairModal({ providers, onClose, onSaved }: { providers: Provider[]; onClose: () => void; onSaved: () => void }) {
-  const [providerKey, setProviderKey] = useState(providers.find(p => p.key === 'aws')?.key ?? providers[0]?.key ?? 'aws')
-  const [service, setService]         = useState('')
-  const [env, setEnv]                 = useState('dev')
-  const [description, setDescription] = useState('')
-  const [accessKey, setAccessKey]     = useState('')
-  const [secretKey, setSecretKey]     = useState('')
-  const [showAK, setShowAK]           = useState(false)
-  const [showSK, setShowSK]           = useState(false)
-  const [error, setError]             = useState('')
-  const [loading, setLoading]         = useState(false)
-
-  const normalize = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
-  const prov   = normalize(providers.find(p => p.key === providerKey)?.name ?? providerKey)
-  const svc    = normalize(service)
-  const envUp  = env.toUpperCase()
-
-  const baseName    = [prov, svc, envUp].filter(Boolean).join('_')
-  const accessAlias = baseName ? `${baseName}_ACCESS_KEY` : 'PROVIDER_SERVICE_ENV_ACCESS_KEY'
-  const secretAlias = baseName ? `${baseName}_SECRET_KEY` : 'PROVIDER_SERVICE_ENV_SECRET_KEY'
-
-  const serviceSuggestions: Record<string, string[]> = {
-    aws:       ['IAM', 'Bedrock', 'S3', 'Lambda', 'DynamoDB', 'EC2', 'SQS', 'Console', 'CodeDeploy', 'CloudWatch'],
-    gcp:       ['Vertex AI', 'BigQuery', 'Cloud Storage', 'Cloud Run', 'Pub Sub', 'GKE'],
-    azure:     ['OpenAI', 'Blob Storage', 'Functions', 'Service Bus', 'AKS'],
-    anthropic: ['API', 'Claude'],
-    openai:    ['API', 'Fine Tuning', 'Assistants'],
-    github:    ['Actions', 'Packages', 'CLI', 'Deploy'],
-  }
-  const suggestions = serviceSuggestions[providerKey] ?? []
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!service)   { setError('Service / purpose is required (e.g. Bedrock, IAM, Console)'); return }
-    if (!accessKey) { setError('Access key value is required'); return }
-    if (!secretKey) { setError('Secret key value is required'); return }
-
-    const input: AddKeyPairInput = {
-      accessKeyAlias: accessAlias,
-      accessKeyValue: accessKey,
-      secretKeyAlias: secretAlias,
-      secretKeyValue: secretKey,
-      providerKey,
-      environment: env,
-      description: description || `${providers.find(p => p.key === providerKey)?.name ?? providerKey} ${service} ${env}`,
-    }
-
-    setLoading(true)
-    try {
-      const res = await api.addKeyPair(input)
-      if (res.err) setError(res.err)
-      else { onSaved(); onClose() }
-    } catch (e: any) { setError(String(e)) }
-    finally { setLoading(false) }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] p-6 shadow-2xl">
-        <div className="mb-4 flex items-center gap-2">
-          <KeyRound className="h-5 w-5 text-[rgb(var(--accent))]" />
-          <h2 className="text-base font-semibold">Add Key Pair</h2>
-          <span className="ml-auto text-xs text-[rgb(var(--text-muted))]">Both keys encrypted separately, linked by name</span>
-        </div>
-
-        <form onSubmit={submit} className="flex flex-col gap-3">
-          <div className="grid grid-cols-3 gap-3">
-            <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
-              Provider
-              <select value={providerKey} onChange={e => { setProviderKey(e.target.value); setService('') }}
-                className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--bg))] px-3 py-2 text-sm text-[rgb(var(--text))] outline-none">
-                {providers.map(p => <option key={p.key} value={p.key}>{p.name}</option>)}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
-              Service / Purpose <span className="text-[rgb(var(--danger))]">*</span>
-              <input value={service} onChange={e => setService(e.target.value)}
-                list="svc-suggestions"
-                placeholder="e.g. Bedrock, IAM, S3…"
-                className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--bg))] px-3 py-2 text-sm text-[rgb(var(--text))] outline-none focus:border-[rgb(var(--accent))]" />
-              <datalist id="svc-suggestions">
-                {suggestions.map(s => <option key={s} value={s} />)}
-              </datalist>
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
-              Environment
-              <select value={env} onChange={e => setEnv(e.target.value)}
-                className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--bg))] px-3 py-2 text-sm text-[rgb(var(--text))] outline-none">
-                {['dev','qa','staging','prod'].map(v => <option key={v} value={v}>{v}</option>)}
-              </select>
-            </label>
-          </div>
-
-          <div className="rounded-lg border border-[rgb(var(--border)/0.4)] bg-[rgb(var(--bg)/0.5)] p-3">
-            <p className="mb-1.5 text-xs font-medium text-[rgb(var(--text-muted))] uppercase tracking-wider">Aliases that will be created</p>
-            <div className="flex gap-2">
-              <code className="flex-1 rounded bg-[rgb(var(--accent)/0.1)] px-2.5 py-1.5 text-xs font-mono text-[rgb(var(--accent))] truncate">{accessAlias}</code>
-              <code className="flex-1 rounded bg-[rgb(var(--accent)/0.1)] px-2.5 py-1.5 text-xs font-mono text-[rgb(var(--accent))] truncate">{secretAlias}</code>
-            </div>
-          </div>
-
-          <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
-            Description <span className="text-[10px]">(optional)</span>
-            <input value={description} onChange={e => setDescription(e.target.value)}
-              placeholder="Leave blank to auto-generate from provider + service + env"
-              className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--bg))] px-3 py-2 text-sm text-[rgb(var(--text))] outline-none focus:border-[rgb(var(--accent))]" />
-          </label>
-
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
-              Access Key <span className="text-[rgb(var(--danger))]">*</span>
-              <div className="relative">
-                <input type={showAK ? 'text' : 'password'} value={accessKey} onChange={e => setAccessKey(e.target.value)}
-                  placeholder="AKIA… / key ID"
-                  className="w-full rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--bg))] px-3 py-2 pr-9 text-sm font-mono text-[rgb(var(--text))] outline-none focus:border-[rgb(var(--accent))]" />
-                <button type="button" onClick={() => setShowAK(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-[rgb(var(--text-muted))]">
-                  {showAK ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
-              Secret Key <span className="text-[rgb(var(--danger))]">*</span>
-              <div className="relative">
-                <input type={showSK ? 'text' : 'password'} value={secretKey} onChange={e => setSecretKey(e.target.value)}
-                  placeholder="wJal… / secret"
-                  className="w-full rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--bg))] px-3 py-2 pr-9 text-sm font-mono text-[rgb(var(--text))] outline-none focus:border-[rgb(var(--accent))]" />
-                <button type="button" onClick={() => setShowSK(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-[rgb(var(--text-muted))]">
-                  {showSK ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </label>
-          </div>
-
-          {error && <p className="text-xs text-[rgb(var(--danger))]">{error}</p>}
-
-          <div className="flex gap-2 pt-1">
-            <button type="button" onClick={onClose}
-              className="flex-1 rounded-lg border border-[rgb(var(--border))] py-2.5 text-sm hover:bg-white/5">
-              Cancel
-            </button>
-            <button type="submit" disabled={loading}
-              className="flex-1 rounded-lg bg-[rgb(var(--accent))] py-2.5 text-sm font-medium text-white hover:bg-[rgb(var(--accent-hover))] disabled:opacity-50">
-              {loading ? 'Saving…' : 'Save Both Keys'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}

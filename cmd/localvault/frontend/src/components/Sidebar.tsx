@@ -1,20 +1,19 @@
 import {
-  LayoutDashboard, Key, ServerCog, Activity,
+  LayoutDashboard, Key, ServerCog,
   ScrollText, HardDrive, Settings, Lock, FileSpreadsheet
 } from 'lucide-react'
 import Brandmark from './Brandmark'
 
-export type View = 'dashboard' | 'secrets' | 'providers' | 'health' | 'audit' | 'backups' | 'import' | 'settings'
+export type View = 'dashboard' | 'secrets' | 'providers' | 'audit' | 'backups' | 'import' | 'settings'
 
 const items: { id: View; label: string; Icon: React.FC<{className?: string}> }[] = [
-  { id: 'dashboard',  label: 'Dashboard',    Icon: LayoutDashboard },
-  { id: 'secrets',    label: 'Secrets',       Icon: Key },
-  { id: 'providers',  label: 'Providers',     Icon: ServerCog },
-  { id: 'health',     label: 'Token Health',  Icon: Activity },
-  { id: 'audit',      label: 'Audit Log',     Icon: ScrollText },
-  { id: 'backups',    label: 'Backups',       Icon: HardDrive },
-  { id: 'import',     label: 'Import',        Icon: FileSpreadsheet },
-  { id: 'settings',   label: 'Settings',      Icon: Settings },
+  { id: 'dashboard',  label: 'Dashboard',   Icon: LayoutDashboard },
+  { id: 'secrets',    label: 'Secrets',     Icon: Key },
+  { id: 'providers',  label: 'Providers',   Icon: ServerCog },
+  { id: 'audit',      label: 'Audit Log',   Icon: ScrollText },
+  { id: 'backups',    label: 'Backups',     Icon: HardDrive },
+  { id: 'import',     label: 'Import',      Icon: FileSpreadsheet },
+  { id: 'settings',   label: 'Settings',    Icon: Settings },
 ]
 
 type Props = {
@@ -25,12 +24,7 @@ type Props = {
 
 export default function Sidebar({ current, onChange, onLock }: Props) {
   return (
-    <aside className="flex h-screen w-52 shrink-0 flex-col border-r border-[rgb(var(--border))] bg-[rgb(var(--surface))]">
-      <div className="flex items-center gap-2 px-4 py-4 border-b border-[rgb(var(--border))]">
-        <Brandmark className="h-7 w-7 shrink-0 text-[rgb(var(--accent))]" />
-        <span className="text-sm font-semibold truncate">Kosh</span>
-      </div>
-
+    <aside className="flex h-full w-52 shrink-0 flex-col border-r border-[rgb(var(--border))] bg-[rgb(var(--surface))]">
       <nav className="flex-1 overflow-y-auto py-2">
         {items.map(({ id, label, Icon }) => (
           <button

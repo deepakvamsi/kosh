@@ -744,4 +744,7 @@ func (a *App) ImportCommit(filePath string, cm ColMapDTO) (ImportCommitResult, e
 	}, nil
 }
 
-func (a *App) GetVersion() string { return "Kosh v0.1.0-alpha (Phase 3)" }
+// GetVersion returns the app version. `version` is injected at build time via
+// -ldflags "-X main.version=<tag>" (see .github/workflows/release.yml); local/dev builds
+// show "Kosh dev".
+func (a *App) GetVersion() string { return "Kosh " + version }

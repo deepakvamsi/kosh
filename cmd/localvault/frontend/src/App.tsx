@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import './style.css'
 import UnlockScreen from './components/UnlockScreen'
 import Sidebar, { View } from './components/Sidebar'
+import TitleBar from './components/TitleBar'
 import DashboardView from './views/DashboardView'
 import SecretsView from './views/SecretsView'
 import ProvidersView from './views/ProvidersView'
-import TokenHealthView from './views/TokenHealthView'
 import AuditView from './views/AuditView'
 import BackupsView from './views/BackupsView'
 import SettingsView from './views/SettingsView'
@@ -93,23 +93,25 @@ export default function App() {
     setLockKey(k => k + 1)
   }
 
-  if (!unlocked) {
-    return <UnlockScreen key={lockKey} onUnlocked={handleUnlocked} />
-  }
-
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar current={view} onChange={setView} onLock={handleLock} />
-      <main key={lockKey} className="flex-1 overflow-hidden bg-[rgb(var(--bg))]">
-        {view === 'dashboard'  && <DashboardView  onNav={v => setView(v as View)} />}
-        {view === 'secrets'    && <SecretsView />}
-        {view === 'providers'  && <ProvidersView />}
-        {view === 'health'     && <TokenHealthView />}
-        {view === 'audit'      && <AuditView />}
-        {view === 'backups'    && <BackupsView />}
-        {view === 'import'     && <ImportView />}
-        {view === 'settings'   && <SettingsView onResetDone={handleReset} />}
-      </main>
+    <div className="flex h-screen flex-col overflow-hidden">
+      <TitleBar />
+      {!unlocked ? (
+        <UnlockScreen key={lockKey} onUnlocked={handleUnlocked} />
+      ) : (
+        <div className="flex flex-1 overflow-hidden">
+          <Sidebar current={view} onChange={setView} onLock={handleLock} />
+          <main key={lockKey} className="flex-1 overflow-hidden bg-[rgb(var(--bg))]">
+            {view === 'dashboard'  && <DashboardView  onNav={v => setView(v as View)} />}
+            {view === 'secrets'    && <SecretsView />}
+            {view === 'providers'  && <ProvidersView />}
+            {view === 'audit'      && <AuditView />}
+            {view === 'backups'    && <BackupsView />}
+            {view === 'import'     && <ImportView />}
+            {view === 'settings'   && <SettingsView onResetDone={handleReset} />}
+          </main>
+        </div>
+      )}
     </div>
   )
 }

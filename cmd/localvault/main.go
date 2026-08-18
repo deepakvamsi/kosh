@@ -12,6 +12,10 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// version is the app version shown in the UI. It defaults to "dev" and is overridden at
+// build time via -ldflags "-X main.version=<tag>" (see the release workflow).
+var version = "dev"
+
 func main() {
 	app := NewApp()
 
@@ -22,15 +26,15 @@ func main() {
 		MinWidth:         900,
 		MinHeight:        600,
 		DisableResize:    false,
-		Frameless:        false,
+		Frameless:        true, // custom in-app title bar provides min/max/close
 		BackgroundColour: &options.RGBA{R: 10, G: 10, B: 15, A: 255},
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		OnStartup:   app.startup,
-		OnDomReady:  app.domReady,
+		OnStartup:     app.startup,
+		OnDomReady:    app.domReady,
 		OnBeforeClose: app.beforeClose,
-		Bind: []interface{}{app},
+		Bind:          []interface{}{app},
 		Windows: &windows.Options{
 			WebviewIsTransparent:              false,
 			WindowIsTranslucent:               false,

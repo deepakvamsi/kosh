@@ -95,7 +95,7 @@ export default function UnlockScreen({ onUnlocked }: Props) {
   }
 
   if (isNew === null) {
-    return <div className="flex h-screen items-center justify-center text-[rgb(var(--text-muted))]">Loading…</div>
+    return <div className="flex h-full flex-1 items-center justify-center text-[rgb(var(--text-muted))]">Loading…</div>
   }
 
   const subtitle = recoverMode
@@ -105,7 +105,7 @@ export default function UnlockScreen({ onUnlocked }: Props) {
       : 'Enter master password to unlock'
 
   return (
-    <div className="flex h-screen flex-col items-center justify-center gap-8 bg-[rgb(var(--bg))] px-6">
+    <div className="flex h-full flex-1 flex-col items-center justify-center gap-8 bg-[rgb(var(--bg))] px-6">
       <div className="flex flex-col items-center gap-3">
         <Brandmark className="h-12 w-12 text-[rgb(var(--accent))]" />
         <span className="text-xl font-semibold tracking-tight">Kosh</span>
