@@ -1,0 +1,17 @@
+{
+  "fixed": {
+    "file_version": "1.0.0.0"
+  },
+  "info": {
+    "0409": {
+      "ProductVersion":   "1.0.0",
+      "ProductName":      "Kosh",
+      "FileDescription":  "Kosh — local-only encrypted API key manager",
+      "CompanyName":      "Deepak Vamsi",
+      "LegalCopyright":   "Copyright 2026 Deepak Vamsi. All rights reserved.",
+      "InternalName":     "Kosh.exe",
+      "OriginalFilename": "Kosh.exe",
+      "Comments":         "Air-sealed, no network, Argon2id + XChaCha20-Poly1305 encrypted vault."
+    }
+  }
+}

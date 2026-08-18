@@ -1,0 +1,13 @@
+Package: kosh
+Version: 1.0.0
+Architecture: amd64
+Maintainer: Deepak Vamsi <deepakvamsi@users.noreply.github.com>
+Installed-Size: 30000
+Depends: libgtk-3-0, libwebkit2gtk-4.1-0
+Section: utils
+Priority: optional
+Homepage: https://github.com/deepakvamsi/kosh
+Description: Kosh — local-only encrypted API key manager
+ A strictly local, offline desktop application for managing developer secrets,
+ API keys, and passwords. No cloud backend, no network calls, no AI-tool access.
+ Encrypted with Argon2id + XChaCha20-Poly1305. Built with Go + Wails.

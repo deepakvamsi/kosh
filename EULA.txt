@@ -1,0 +1,81 @@
+================================================================================
+  DRAFT — END USER LICENSE AGREEMENT (EULA)
+  NOT LEGAL ADVICE. Review and finalize with qualified legal counsel before
+  distributing. Fill every [BRACKETED] placeholder. This template is a starting
+  point for a PROPRIETARY license and is an alternative to the open-source
+  Apache-2.0 LICENSE file in this repository — ship ONE of them, not both.
+================================================================================
+
+KOSH — END USER LICENSE AGREEMENT
+Last updated: [DATE]
+
+This End User License Agreement ("Agreement") is a legal agreement between you
+(either an individual or a single legal entity, "You") and [LEGAL ENTITY NAME]
+("[SHORT NAME]", "we", "us") for the Kosh software application, including all
+associated media, documentation, and updates (collectively, the "Software").
+
+By installing, copying, or otherwise using the Software, You agree to be bound by
+this Agreement. If You do not agree, do not install or use the Software.
+
+1. LICENSE GRANT
+   Subject to Your compliance with this Agreement, we grant You a limited,
+   non-exclusive, non-transferable, revocable license to install and use the
+   Software on devices You own or control, solely for Your internal purposes.
+
+2. RESTRICTIONS
+   You shall not, and shall not permit others to:
+     (a) copy, modify, or create derivative works of the Software except as
+         expressly permitted;
+     (b) reverse engineer, decompile, or disassemble the Software, except to the
+         extent applicable law expressly permits despite this limitation;
+     (c) rent, lease, lend, sell, sublicense, distribute, or provide the Software
+         as a service to any third party;
+     (d) remove or alter any proprietary notices; or
+     (e) use the Software in violation of any applicable law or regulation.
+
+3. OWNERSHIP
+   The Software is licensed, not sold. We and our licensors retain all right,
+   title, and interest in and to the Software, including all intellectual
+   property rights. No rights are granted except as expressly set out here.
+
+4. YOUR DATA
+   The Software stores your data locally on your device and makes no network
+   connections. You are solely responsible for your master password, recovery
+   key, encrypted vault, and backups. We have no access to and cannot recover
+   any of them. Loss of your master password and recovery key means permanent
+   loss of access to your data.
+
+5. THIRD-PARTY COMPONENTS
+   The Software includes third-party open-source components, each licensed under
+   its own terms (see the NOTICE file). Those terms govern your use of those
+   components and, where required, take precedence over this Agreement with
+   respect to those components.
+
+6. DISCLAIMER OF WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTY OF ANY
+   KIND, WHETHER EXPRESS, IMPLIED, OR STATUTORY, INCLUDING WITHOUT LIMITATION
+   THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+   TITLE, AND NON-INFRINGEMENT. WE DO NOT WARRANT THAT THE SOFTWARE WILL BE
+   ERROR-FREE OR UNINTERRUPTED.
+
+7. LIMITATION OF LIABILITY
+   TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT WILL WE BE LIABLE FOR ANY
+   INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS
+   OF DATA, PROFITS, OR GOODWILL, ARISING OUT OF OR RELATED TO THE SOFTWARE. OUR
+   TOTAL AGGREGATE LIABILITY WILL NOT EXCEED [AMOUNT / THE AMOUNT YOU PAID, IF
+   ANY].
+
+8. TERMINATION
+   This Agreement is effective until terminated. It terminates automatically if
+   You breach it. Upon termination, You must cease all use and destroy all copies
+   of the Software. Sections 3 and 6–10 survive termination.
+
+9. GOVERNING LAW
+   This Agreement is governed by the laws of [JURISDICTION], without regard to
+   conflict-of-laws principles. The courts of [VENUE] have exclusive jurisdiction.
+
+10. ENTIRE AGREEMENT
+    This Agreement is the entire agreement between You and us regarding the
+    Software and supersedes all prior understandings.
+
+Contact: [LEGAL ENTITY NAME], [ADDRESS], [EMAIL]

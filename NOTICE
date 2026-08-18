@@ -1,0 +1,14 @@
+Kosh
+Copyright 2026 Deepak Vamsi
+
+This product includes software developed at Deepak Vamsi.
+
+Licensed under the Apache License, Version 2.0 (see the LICENSE file).
+
+--------------------------------------------------------------------------------
+Third-party components (see each project for its own license):
+  - golang.org/x/crypto, golang.org/x/sys            (BSD-3-Clause)
+  - modernc.org/sqlite                               (BSD-3-Clause)
+  - github.com/xuri/excelize/v2                      (BSD-3-Clause)
+  - github.com/wailsapp/wails/v2                      (MIT)
+  - React, Vite, Tailwind CSS, lucide-react           (MIT / ISC)

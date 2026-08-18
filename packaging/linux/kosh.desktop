@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Kosh
+Comment=Local-only encrypted API key & password manager
+Exec=/usr/local/bin/Kosh
+Icon=kosh
+Categories=Utility;Security;
+Terminal=false
+StartupWMClass=Kosh

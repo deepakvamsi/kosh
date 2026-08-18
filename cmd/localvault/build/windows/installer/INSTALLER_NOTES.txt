@@ -1,0 +1,42 @@
+; Kosh — Windows NSIS Installer Script
+; Build with: wails build -nsis
+; Pre-requisites: NSIS 3.x and the EnVar plugin (for PATH editing).
+;
+; Wails generates this NSIS script at build time via the template in
+; build/windows/installer/project.nsi. Edit that file for full customisation.
+; This comments-only file documents what the generated installer does so you
+; can review it before shipping.
+;
+; ── What the installer does ───────────────────────────────────────────────
+; 1. Copies Kosh.exe to %ProgramFiles%\Kosh\Kosh.exe
+; 2. Writes version info (ProductVersion, CompanyName, Copyright) from wails.json
+; 3. Creates a Desktop shortcut and a Start-Menu entry
+; 4. Registers an Add/Remove Programs entry with an uninstaller
+; 5. Does NOT set any PATH variables or create scheduled tasks
+; 6. Does NOT require network access — the installer is fully offline
+;
+; ── Code-signing guidance ─────────────────────────────────────────────────
+; To prevent Windows SmartScreen warnings, sign the binary BEFORE packaging:
+;
+;   signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 \
+;                 /a Kosh.exe
+;
+; A free option for open-source projects is SSL.com's EV code signing
+; certificate, or you can use a personal OV certificate from DigiCert / Sectigo.
+; Without a certificate Windows will show a blue SmartScreen dialog on first run.
+; This is expected and does not indicate malware; it is a consequence of the
+; app not yet having reputation with Microsoft.
+;
+; ── Building the installer ────────────────────────────────────────────────
+;   cd cmd\localvault
+;   wails build -nsis -ldflags "-X main.version=1.0.0"
+;
+; The output will be in:
+;   cmd\localvault\build\bin\Kosh-amd64-installer.exe
+;
+; ── Verifying the build ───────────────────────────────────────────────────
+; After building, check that the binary does NOT listen on any port:
+;   netstat -anb | findstr Kosh   (should return nothing)
+;
+; And that the vault file is in the correct location after first run:
+;   %APPDATA%\Kosh\vault.db

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WiX v4 authoring for a Kosh MSI (enterprise deployment: Intune / SCCM / Group Policy).
+  This complements the NSIS .exe installer that `wails build -nsis` produces; an MSI is
+  what IT departments deploy silently and at scale.
+
+  Build (see build-msi.ps1):
+    dotnet tool install --global wix        # one-time
+    wix build .\Kosh.wxs -d ExeSource=<path-to-Kosh.exe> -d Version=0.1.0 -o Kosh.msi
+
+  Silent install / uninstall:
+    msiexec /i Kosh.msi /qn
+    msiexec /x Kosh.msi /qn
+
+  NOTE: WebView2 runtime is a prerequisite of the Wails app. On current Windows 10/11 it
+  is present by default; for older images, chain the Evergreen bootstrapper or add it as a
+  prerequisite in your deployment tooling. Keep UpgradeCode STABLE across all releases.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Kosh"
+           Manufacturer="Deepak Vamsi"
+           Version="$(var.Version)"
+           UpgradeCode="7F3A9C21-4E58-4B0D-9A2F-1C6E8D40B512"
+           Scope="perMachine">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Kosh is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Kosh" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="AppShortcutFolder" Name="Kosh" />
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Kosh" Level="1">
+      <ComponentGroupRef Id="AppComponents" />
+    </Feature>
+
+    <ComponentGroup Id="AppComponents">
+      <Component Id="KoshExe" Directory="INSTALLFOLDER" Guid="*">
+        <File Id="KoshExeFile" Source="$(var.ExeSource)" KeyPath="yes">
+          <Shortcut Id="StartMenuShortcut"
+                    Directory="AppShortcutFolder"
+                    Name="Kosh"
+                    WorkingDirectory="INSTALLFOLDER"
+                    Advertise="yes" />
+        </File>
+      </Component>
+
+      <Component Id="CleanupShortcutFolder" Directory="AppShortcutFolder" Guid="*">
+        <RemoveFolder Id="RemoveAppShortcutFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\Kosh"
+                       Name="installed" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Package>
+</Wix>
