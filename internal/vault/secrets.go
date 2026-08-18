@@ -9,20 +9,27 @@ import (
 	"kosh/internal/crypto"
 )
 
-// AddSecretInput describes a new secret to store.
+// AddSecretInput describes a new vault entry to store. The fields used depend on
+// ItemType (see encodeItemPayload): ItemAPIKey uses Value; ItemLogin uses Username +
+// Password; ItemSecureNote uses Note. All secret material is encrypted immediately and
+// never persisted in clear.
 type AddSecretInput struct {
 	Alias        string
+	ItemType     ItemType // "" is treated as ItemAPIKey
 	ProviderKey  string
 	Environment  Environment
 	Description  string
-	Value        []byte // plaintext; encrypted immediately and never persisted in clear
+	Value        []byte // ItemAPIKey: the raw key/token
+	Username     string // ItemLogin: account identifier (encrypted with the payload)
+	Password     string // ItemLogin: the password
+	Note         string // ItemSecureNote: free-form note body
 	ExpiresAt    *int64
 	RotationDays *int
 }
 
-// AddSecret encrypts and stores a new secret. The plaintext Value is encrypted under
-// the DEK with provider/environment bound as associated data, and a keyed hash is
-// stored for duplicate detection. The caller's plaintext buffer is zeroized.
+// AddSecret encrypts and stores a new entry. The type-specific plaintext payload is
+// encrypted under the DEK with provider/environment bound as associated data, and a
+// keyed hash is stored for duplicate detection. Plaintext buffers are zeroized.
 func (v *Vault) AddSecret(in AddSecretInput) (int64, error) {
 	dek, hm, err := v.dekCopy()
 	if err != nil {
@@ -32,6 +39,11 @@ func (v *Vault) AddSecret(in AddSecretInput) (int64, error) {
 	defer crypto.Zero(hm)
 	defer crypto.Zero(in.Value)
 
+	in.ItemType = in.ItemType.normalize()
+	if !validItemType(in.ItemType) {
+		return 0, fmt.Errorf("vault: invalid item type %q", in.ItemType)
+	}
+
 	pid, err := v.providerID(in.ProviderKey)
 	if err != nil {
 		return 0, err
@@ -40,7 +52,15 @@ func (v *Vault) AddSecret(in AddSecretInput) (int64, error) {
 		return 0, fmt.Errorf("vault: invalid environment %q", in.Environment)
 	}
 
-	valueHash := crypto.KeyedHash(hm, in.Value)
+	// Build the canonical plaintext for this item type and zeroize it afterwards. For
+	// ItemAPIKey this aliases in.Value (already zeroized above); double-zero is harmless.
+	pt, err := encodeItemPayload(in)
+	if err != nil {
+		return 0, err
+	}
+	defer crypto.Zero(pt)
+
+	valueHash := crypto.KeyedHash(hm, pt)
 
 	ts := time.Now().Unix()
 
@@ -56,9 +76,9 @@ func (v *Vault) AddSecret(in AddSecretInput) (int64, error) {
 	defer tx.Rollback()
 
 	res, err := tx.Exec(
-		`INSERT INTO secrets(alias,provider_id,environment,description,value_enc,value_hash,created_at,updated_at,expires_at,rotation_days)
-		 VALUES(?,?,?,?,?,?,?,?,?,?)`,
-		in.Alias, pid, string(in.Environment), in.Description, []byte{}, valueHash, ts, ts, in.ExpiresAt, in.RotationDays,
+		`INSERT INTO secrets(alias,item_type,provider_id,environment,description,value_enc,value_hash,created_at,updated_at,expires_at,rotation_days)
+		 VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		in.Alias, string(in.ItemType), pid, string(in.Environment), in.Description, []byte{}, valueHash, ts, ts, in.ExpiresAt, in.RotationDays,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("vault: insert secret: %w", err)
@@ -69,7 +89,7 @@ func (v *Vault) AddSecret(in AddSecretInput) (int64, error) {
 	}
 
 	ad := v.associatedData(id, in.ProviderKey, in.Environment)
-	blob, err := crypto.Encrypt(dek, in.Value, ad)
+	blob, err := crypto.Encrypt(dek, pt, ad)
 	if err != nil {
 		return 0, err
 	}
@@ -85,13 +105,23 @@ func (v *Vault) AddSecret(in AddSecretInput) (int64, error) {
 	return id, nil
 }
 
-// Reveal decrypts and returns the plaintext value for an alias, updating last_used_at
-// and writing an audit record. The caller is responsible for zeroizing the returned
-// slice as soon as possible.
+// Reveal decrypts and returns the raw stored plaintext for an alias, updating
+// last_used_at and writing an audit record. For a login the raw bytes are the
+// {"username","password"} JSON and for a secure note the note body; use RevealItem for a
+// decoded, type-aware result. The caller must zeroize the returned slice promptly.
 func (v *Vault) Reveal(alias string) ([]byte, error) {
+	_, pt, err := v.revealRaw(alias)
+	return pt, err
+}
+
+// revealRaw decrypts the payload for alias, records the audit reveal and bumps
+// last_used_at in one transaction, and returns the entry's item type alongside the
+// plaintext. Auditability is a hard requirement: if the reveal cannot be recorded, the
+// plaintext is zeroized and an error returned rather than handed back unlogged.
+func (v *Vault) revealRaw(alias string) (ItemType, []byte, error) {
 	dek, _, err := v.dekCopy()
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	defer crypto.Zero(dek)
 
@@ -99,47 +129,45 @@ func (v *Vault) Reveal(alias string) ([]byte, error) {
 		id          int64
 		providerKey string
 		env         string
+		itemType    string
 		blob        []byte
 	)
 	row := v.db.SQL().QueryRow(
-		`SELECT s.id, p.key, s.environment, s.value_enc
+		`SELECT s.id, p.key, s.environment, s.item_type, s.value_enc
 		   FROM secrets s JOIN providers p ON p.id=s.provider_id
 		  WHERE s.alias=?`, alias)
-	if err := row.Scan(&id, &providerKey, &env, &blob); err == sql.ErrNoRows {
-		return nil, ErrNotFound
+	if err := row.Scan(&id, &providerKey, &env, &itemType, &blob); err == sql.ErrNoRows {
+		return "", nil, ErrNotFound
 	} else if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
 	ad := v.associatedData(id, providerKey, Environment(env))
 	pt, err := crypto.Decrypt(dek, blob, ad)
 	if err != nil {
 		_ = audit.Log(v.db.SQL(), v.actor, "reveal", alias, audit.Deny, "decrypt failed")
-		return nil, err
+		return "", nil, err
 	}
 
-	// Record the reveal and bump last_used_at atomically. Auditability is a hard
-	// requirement: if we cannot record that a secret was revealed, we do not hand the
-	// plaintext back — we zeroize it and fail instead.
 	tx, err := v.db.SQL().Begin()
 	if err != nil {
 		crypto.Zero(pt)
-		return nil, err
+		return "", nil, err
 	}
 	defer tx.Rollback()
 	if _, err := tx.Exec(`UPDATE secrets SET last_used_at=? WHERE id=?`, time.Now().Unix(), id); err != nil {
 		crypto.Zero(pt)
-		return nil, err
+		return "", nil, err
 	}
 	if err := audit.LogTx(tx, v.actor, "reveal", alias, audit.Allow, ""); err != nil {
 		crypto.Zero(pt)
-		return nil, fmt.Errorf("vault: audit reveal: %w", err)
+		return "", nil, fmt.Errorf("vault: audit reveal: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		crypto.Zero(pt)
-		return nil, err
+		return "", nil, err
 	}
-	return pt, nil
+	return ItemType(itemType).normalize(), pt, nil
 }
 
 // UpdateValue replaces the stored value for an alias. The old duplicate hash is
@@ -218,7 +246,7 @@ func (v *Vault) ListSecrets() ([]Secret, error) {
 		return nil, ErrLocked
 	}
 	rows, err := v.db.SQL().Query(
-		`SELECT s.id,s.alias,p.key,s.environment,COALESCE(s.description,''),s.created_at,s.updated_at,
+		`SELECT s.id,s.alias,s.item_type,p.key,s.environment,COALESCE(s.description,''),s.created_at,s.updated_at,
 		        s.last_used_at,s.expires_at,s.rotation_days,s.is_archived
 		   FROM secrets s JOIN providers p ON p.id=s.provider_id
 		  ORDER BY s.created_at DESC`)
@@ -230,12 +258,13 @@ func (v *Vault) ListSecrets() ([]Secret, error) {
 	var out []Secret
 	for rows.Next() {
 		var s Secret
-		var env string
+		var env, itemType string
 		var archived int
-		if err := rows.Scan(&s.ID, &s.Alias, &s.ProviderKey, &env, &s.Description,
+		if err := rows.Scan(&s.ID, &s.Alias, &itemType, &s.ProviderKey, &env, &s.Description,
 			&s.CreatedAt, &s.UpdatedAt, &s.LastUsedAt, &s.ExpiresAt, &s.RotationDays, &archived); err != nil {
 			return nil, err
 		}
+		s.ItemType = ItemType(itemType).normalize()
 		s.Environment = Environment(env)
 		s.Archived = archived == 1
 		out = append(out, s)

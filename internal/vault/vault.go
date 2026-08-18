@@ -39,11 +39,39 @@ const (
 	Prod    Environment = "prod"
 )
 
+// ItemType classifies what a vault entry holds. The type is non-secret metadata; the
+// sensitive payload always lives encrypted in value_enc (see internal/storage/migrations
+// 0003). Existing entries and any zero value are treated as ItemAPIKey.
+type ItemType string
+
+const (
+	ItemAPIKey     ItemType = "api_key"     // value_enc = raw key bytes
+	ItemLogin      ItemType = "login"       // value_enc = JSON {"username","password"}
+	ItemSecureNote ItemType = "secure_note" // value_enc = note text
+)
+
+// normalize maps the zero value to the default type so callers never have to.
+func (t ItemType) normalize() ItemType {
+	if t == "" {
+		return ItemAPIKey
+	}
+	return t
+}
+
+func validItemType(t ItemType) bool {
+	switch t {
+	case ItemAPIKey, ItemLogin, ItemSecureNote:
+		return true
+	}
+	return false
+}
+
 // Secret is non-secret metadata about a stored credential. It never contains the
-// plaintext value; use Reveal to obtain the value on demand.
+// plaintext value; use Reveal / RevealItem to obtain the payload on demand.
 type Secret struct {
 	ID           int64
 	Alias        string
+	ItemType     ItemType
 	ProviderKey  string
 	Environment  Environment
 	Description  string

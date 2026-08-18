@@ -67,6 +67,7 @@ Pull your keys out of a dozen spreadsheets and into one treasury that actually p
 | | |
 |---|---|
 | 🔑 **Envelope encryption** | An Argon2id-derived Key-Encryption-Key wraps a random Data-Encryption-Key; secret values are sealed with XChaCha20-Poly1305 AEAD. Nothing is stored in plaintext. |
+| 🗂️ **Typed items** | Store API keys, full **logins** (username + password), and **secure notes**. Every sensitive field — the username included — is encrypted inside the value blob; none of it touches a queryable column. |
 | 🧾 **Tamper-evident audit log** | Every action is a hash-chained record — edit or delete one entry and `VerifyChain()` pinpoints exactly where the chain broke. |
 | 📴 **Air-sealed** | No cloud, no login server, no telemetry, no listener. A build-time guard (`internal/seal`) rejects any networking import so the offline guarantee can't silently regress. |
 | 👁️ **Names without values** | Browse *which* secrets you have (`OPENAI_PROD`, `AWS_STAGING`) without decrypting a single value; decryption happens only on an explicit, audited reveal. |

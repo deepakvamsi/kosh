@@ -1,6 +1,9 @@
+export type ItemType = 'api_key' | 'login' | 'secure_note'
+
 export type SecretSummary = {
   id: number
   alias: string
+  itemType: ItemType
   providerKey: string
   providerName: string
   environment: string
@@ -11,6 +14,17 @@ export type SecretSummary = {
   lastUsedAt: number | null
   isArchived: boolean
   customFields: string
+}
+
+// RevealedItem is the decoded result of RevealItem — only the fields relevant to
+// itemType are populated.
+export type RevealedItem = {
+  itemType: ItemType
+  value: string    // api_key
+  username: string // login
+  password: string // login
+  note: string     // secure_note
+  err?: string
 }
 
 export type BoolResult = { ok: boolean; err?: string }
@@ -50,10 +64,14 @@ export type AddProviderInput = {
 
 export type AddSecretInput = {
   alias: string
+  itemType?: ItemType // defaults to 'api_key' on the backend
   providerKey: string
   environment: string
   description: string
-  value: string
+  value: string     // api_key
+  username?: string // login
+  password?: string // login
+  note?: string     // secure_note
   expiresAt?: number | null
   rotationDays?: number | null
 }

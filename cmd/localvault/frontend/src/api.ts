@@ -1,4 +1,4 @@
-import { BoolResult, IDResult, SecretSummary, HealthItem, AuditEntry, Provider, AddSecretInput, AddKeyPairInput, ImportPreviewResult, ImportCommitResult, AddProviderInput } from './types'
+import { BoolResult, IDResult, SecretSummary, RevealedItem, HealthItem, AuditEntry, Provider, AddSecretInput, AddKeyPairInput, ImportPreviewResult, ImportCommitResult, AddProviderInput } from './types'
 
 declare global {
   interface Window {
@@ -16,6 +16,7 @@ declare global {
           RecoverWithKey(recoveryCode: string, newPassword: string): Promise<BoolResult>
           ListSecrets(search: string, provider: string, env: string, includeArchived: boolean): Promise<SecretSummary[]>
           RevealSecret(alias: string): Promise<string>
+          RevealItem(alias: string): Promise<RevealedItem>
           AddSecret(input: AddSecretInput): Promise<IDResult>
           UpdateSecretValue(alias: string, newValue: string): Promise<BoolResult>
           DeleteSecret(alias: string): Promise<BoolResult>
@@ -62,6 +63,7 @@ export const api = {
   listSecrets:   (search='', provider='', env='', includeArchived=false) =>
                    go().ListSecrets(search, provider, env, includeArchived),
   revealSecret:  (alias: string)             => go().RevealSecret(alias),
+  revealItem:    (alias: string)             => go().RevealItem(alias),
   addSecret:     (input: AddSecretInput)     => go().AddSecret(input),
   updateValue:   (alias: string, val: string)=> go().UpdateSecretValue(alias, val),
   deleteSecret:  (alias: string)             => go().DeleteSecret(alias),

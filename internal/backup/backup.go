@@ -33,11 +33,12 @@ import (
 	"kosh/internal/crypto"
 )
 
-// formatVersion 2 adds the vault_meta (key material) block to the snapshot so backups
-// are restorable onto a fresh install. Version 1 archives (pre-portability alpha) only
-// held secret ciphertext and could not be restored to a new vault; they are not
-// accepted by this version.
-const formatVersion = 2
+// formatVersion 3 adds the per-secret item_type (api_key / login / secure_note). Version
+// 2 added the vault_meta (key material) block so backups are restorable onto a fresh
+// install; v2 archives are still accepted and their secrets restored as api_key. Version
+// 1 archives (pre-portability alpha) held only ciphertext, cannot be restored to a new
+// vault, and are rejected.
+const formatVersion = 3
 
 // ErrBadBackup is returned when a backup file cannot be authenticated or parsed.
 var ErrBadBackup = errors.New("backup: invalid or corrupted backup")
@@ -62,6 +63,7 @@ type Header struct {
 type SecretRecord struct {
 	ID           int64  `json:"id"`
 	Alias        string `json:"alias"`
+	ItemType     string `json:"type,omitempty"` // empty in v2 archives → restored as api_key
 	ProviderKey  string `json:"provider"`
 	Environment  string `json:"env"`
 	Description  string `json:"desc,omitempty"`
@@ -203,7 +205,7 @@ func Import(db *sql.DB, archive, masterPassword []byte) error {
 	if err := json.Unmarshal(hdrBytes, &hdr); err != nil {
 		return ErrBadBackup
 	}
-	if hdr.FormatVersion != formatVersion {
+	if hdr.FormatVersion != formatVersion && hdr.FormatVersion != 2 {
 		return fmt.Errorf("backup: unsupported format version %d", hdr.FormatVersion)
 	}
 
@@ -285,7 +287,7 @@ func snapshot(db *sql.DB) (VaultSnapshot, error) {
 
 	// All secrets (archived included), with folder membership and custom fields.
 	rows, err := db.Query(
-		`SELECT s.id, s.alias, p.key, s.environment,
+		`SELECT s.id, s.alias, COALESCE(s.item_type,'api_key'), p.key, s.environment,
 		        COALESCE(s.description,''), s.value_enc, s.value_hash,
 		        s.created_at, s.updated_at, s.last_used_at, s.expires_at, s.rotation_days,
 		        s.folder_id, COALESCE(s.custom_fields,'{}'), s.is_archived
@@ -299,7 +301,7 @@ func snapshot(db *sql.DB) (VaultSnapshot, error) {
 		var r SecretRecord
 		var archived int
 		if err := rows.Scan(
-			&r.ID, &r.Alias, &r.ProviderKey, &r.Environment, &r.Description,
+			&r.ID, &r.Alias, &r.ItemType, &r.ProviderKey, &r.Environment, &r.Description,
 			&r.ValueEnc, &r.ValueHash, &r.CreatedAt, &r.UpdatedAt,
 			&r.LastUsedAt, &r.ExpiresAt, &r.RotationDays,
 			&r.FolderID, &r.CustomFields, &archived,
@@ -418,14 +420,19 @@ func restore(db *sql.DB, snap VaultSnapshot) error {
 			archived = 1
 		}
 
+		itemType := r.ItemType
+		if itemType == "" {
+			itemType = "api_key" // v2 archives predate item types
+		}
+
 		// Insert with the original id so the value_enc AAD (which binds the row id)
 		// still authenticates on Reveal.
 		_, err = tx.Exec(
 			`INSERT INTO secrets
-			 (id,alias,provider_id,environment,description,value_enc,value_hash,
+			 (id,alias,item_type,provider_id,environment,description,value_enc,value_hash,
 			  created_at,updated_at,last_used_at,expires_at,rotation_days,folder_id,custom_fields,is_archived)
-			 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			r.ID, r.Alias, providerID, r.Environment, r.Description,
+			 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			r.ID, r.Alias, itemType, providerID, r.Environment, r.Description,
 			r.ValueEnc, r.ValueHash,
 			r.CreatedAt, r.UpdatedAt, r.LastUsedAt, r.ExpiresAt, r.RotationDays,
 			r.FolderID, customFields, archived,

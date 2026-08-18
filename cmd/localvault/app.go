@@ -204,6 +204,7 @@ func (a *App) RecoverWithKey(recoveryCode, newPassword string) BoolResult {
 type SecretSummaryDTO struct {
 	ID           int64    `json:"id"`
 	Alias        string   `json:"alias"`
+	ItemType     string   `json:"itemType"`
 	ProviderKey  string   `json:"providerKey"`
 	ProviderName string   `json:"providerName"`
 	Environment  string   `json:"environment"`
@@ -231,7 +232,7 @@ func (a *App) ListSecrets(search, provider, env string, includeArchived bool) ([
 	out := make([]SecretSummaryDTO, len(summaries))
 	for i, s := range summaries {
 		out[i] = SecretSummaryDTO{
-			ID: s.ID, Alias: s.Alias, ProviderKey: s.ProviderKey,
+			ID: s.ID, Alias: s.Alias, ItemType: string(s.ItemType), ProviderKey: s.ProviderKey,
 			ProviderName: s.ProviderName, Environment: string(s.Environment),
 			Tags: s.Tags, FolderName: s.FolderName, Description: s.Description,
 			ExpiresAt: s.ExpiresAt, LastUsedAt: s.LastUsedAt, IsArchived: s.IsArchived,
@@ -257,10 +258,14 @@ func (a *App) RevealSecret(alias string) (string, error) {
 
 type AddSecretInput struct {
 	Alias        string `json:"alias"`
+	ItemType     string `json:"itemType"` // "api_key" (default) | "login" | "secure_note"
 	ProviderKey  string `json:"providerKey"`
 	Environment  string `json:"environment"`
 	Description  string `json:"description"`
-	Value        string `json:"value"`
+	Value        string `json:"value"`    // api_key
+	Username     string `json:"username"` // login
+	Password     string `json:"password"` // login
+	Note         string `json:"note"`     // secure_note
 	ExpiresAt    *int64 `json:"expiresAt"`
 	RotationDays *int   `json:"rotationDays"`
 }
@@ -271,10 +276,14 @@ func (a *App) AddSecret(in AddSecretInput) IDResult {
 	}
 	id, err := a.vault.AddSecret(lv_vault.AddSecretInput{
 		Alias:        in.Alias,
+		ItemType:     lv_vault.ItemType(in.ItemType),
 		ProviderKey:  in.ProviderKey,
 		Environment:  lv_vault.Environment(in.Environment),
 		Description:  in.Description,
 		Value:        []byte(in.Value),
+		Username:     in.Username,
+		Password:     in.Password,
+		Note:         in.Note,
 		ExpiresAt:    in.ExpiresAt,
 		RotationDays: in.RotationDays,
 	})
@@ -282,6 +291,37 @@ func (a *App) AddSecret(in AddSecretInput) IDResult {
 		return IDResult{Err: err.Error()}
 	}
 	return IDResult{ID: id}
+}
+
+// RevealedItemDTO is the decoded, type-aware reveal returned to the UI. Only the fields
+// relevant to ItemType are populated.
+type RevealedItemDTO struct {
+	ItemType string `json:"itemType"`
+	Value    string `json:"value"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Note     string `json:"note"`
+	Err      string `json:"err,omitempty"`
+}
+
+// RevealItem decrypts an entry and returns it decoded per its stored type (api_key /
+// login / secure_note). This is the reveal path the UI should use so a login surfaces its
+// username and password as separate, individually-copyable fields.
+func (a *App) RevealItem(alias string) RevealedItemDTO {
+	if a.vault == nil {
+		return RevealedItemDTO{Err: errVaultUnavailable.Error()}
+	}
+	r, err := a.vault.RevealItem(alias)
+	if err != nil {
+		return RevealedItemDTO{Err: err.Error()}
+	}
+	return RevealedItemDTO{
+		ItemType: string(r.ItemType),
+		Value:    r.Value,
+		Username: r.Username,
+		Password: r.Password,
+		Note:     r.Note,
+	}
 }
 
 func (a *App) UpdateSecretValue(alias, newValue string) BoolResult {

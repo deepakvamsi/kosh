@@ -27,6 +27,7 @@ type Tag struct {
 type SecretSummary struct {
 	ID           int64
 	Alias        string
+	ItemType     ItemType
 	ProviderKey  string
 	ProviderName string
 	Environment  Environment
@@ -46,7 +47,7 @@ func (v *Vault) ListNames(filter ListFilter) ([]SecretSummary, error) {
 		return nil, ErrLocked
 	}
 
-	q := `SELECT s.id, s.alias, p.key, p.name,
+	q := `SELECT s.id, s.alias, s.item_type, p.key, p.name,
 	             s.environment, COALESCE(s.description,''),
 	             s.expires_at, s.last_used_at, s.is_archived,
 	             COALESCE(f.name,''), COALESCE(s.custom_fields,'{}')
@@ -83,13 +84,14 @@ func (v *Vault) ListNames(filter ListFilter) ([]SecretSummary, error) {
 	var out []SecretSummary
 	for rows.Next() {
 		var s SecretSummary
-		var env string
+		var env, itemType string
 		var archived int
 		var folderName string
-		if err := rows.Scan(&s.ID, &s.Alias, &s.ProviderKey, &s.ProviderName,
+		if err := rows.Scan(&s.ID, &s.Alias, &itemType, &s.ProviderKey, &s.ProviderName,
 			&env, &s.Description, &s.ExpiresAt, &s.LastUsedAt, &archived, &folderName, &s.CustomFields); err != nil {
 			return nil, err
 		}
+		s.ItemType = ItemType(itemType).normalize()
 		s.Environment = Environment(env)
 		s.IsArchived = archived == 1
 		s.FolderName = folderName

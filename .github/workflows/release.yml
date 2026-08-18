@@ -31,9 +31,17 @@ jobs:
         with: { node-version: '20' }
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+      - name: Install NSIS (Wails skips the installer silently if makensis is missing)
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          # Put makensis on PATH for the build step; the choco package installs here.
+          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Build (Windows + NSIS installer)
         working-directory: cmd/localvault
-        run: wails build -platform windows/amd64 -nsis
+        run: |
+          makensis /VERSION
+          wails build -platform windows/amd64 -nsis
       - name: Code-sign (runs only if signing secrets are configured)
         if: ${{ env.WINDOWS_PFX_BASE64 != '' }}
         shell: pwsh
@@ -52,9 +60,20 @@ jobs:
       - name: Stage artifacts
         shell: bash
         run: |
+          echo "=== contents of build/bin (diagnostic) ==="
+          ls -la cmd/localvault/build/bin/ || true
           mkdir dist-artifacts
+          # Portable binary must exist — fail loudly if the build didn't produce it.
           cp cmd/localvault/build/bin/Kosh.exe "dist-artifacts/Kosh-${GITHUB_REF_NAME}-windows-amd64.exe"
-          cp cmd/localvault/build/bin/*installer.exe "dist-artifacts/Kosh-${GITHUB_REF_NAME}-windows-amd64-setup.exe" || true
+          # NSIS installer: Wails names it "<Product>-<arch>-installer.exe". Copy whichever
+          # matches; fail the job if none is found (silent drops are how it went missing before).
+          installer=$(ls cmd/localvault/build/bin/*installer.exe 2>/dev/null | head -n1 || true)
+          if [ -n "$installer" ]; then
+            cp "$installer" "dist-artifacts/Kosh-${GITHUB_REF_NAME}-windows-amd64-setup.exe"
+          else
+            echo "::error::NSIS installer not found in build/bin — check the 'Build (Windows + NSIS installer)' step output above."
+            exit 1
+          fi
       - name: Checksums
         shell: bash
         working-directory: dist-artifacts
