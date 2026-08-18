@@ -41,25 +41,12 @@ ManifestDPIAware true
 !define MUI_LICENSEPAGE_TEXT_TOP "Please review the license terms before installing ${INFO_PRODUCTNAME}."
 
 # ── Optional finish-page actions ──────────────────────────────────────────────
-# "Launch after install" checkbox
+# "Launch after install" checkbox. (The Start-menu + Desktop shortcuts and the
+# Add/Remove Programs entry are created by the main install section below; modern Windows
+# no longer allows programmatic taskbar pinning, so we don't attempt it.)
 !define MUI_FINISHPAGE_RUN         "$INSTDIR\${PRODUCT_EXECUTABLE}"
 !define MUI_FINISHPAGE_RUN_TEXT    "Launch Kosh now"
 !define MUI_FINISHPAGE_RUN_NOTCHECKED
-
-# "Pin to Start" checkbox (runs a small helper on finish)
-!define MUI_FINISHPAGE_SHOWREADME
-!define MUI_FINISHPAGE_SHOWREADME_TEXT  "Pin to Start menu"
-!define MUI_FINISHPAGE_SHOWREADME_FUNCTION pinToStart
-
-Function pinToStart
-    !insertmacro wails.setShellContext
-    # Create a secondary Start-menu shortcut; Windows will offer to pin it on first launch
-    CreateShortcut "$STARTMENU\Programs\${INFO_PRODUCTNAME}\${INFO_PRODUCTNAME}.lnk" \
-                   "$INSTDIR\${PRODUCT_EXECUTABLE}" "" "$INSTDIR\${PRODUCT_EXECUTABLE}" 0
-    # Optional: pin via PowerShell (Windows 10/11 only)
-    ExecWait 'powershell.exe -NoProfile -NonInteractive -Command \
-        "try { (New-Object -ComObject Shell.Application).Namespace(''$INSTDIR'').ParseName(''${PRODUCT_EXECUTABLE}'').InvokeVerb(''taskbarpin'') } catch {}"'
-FunctionEnd
 
 # ── Installer pages ────────────────────────────────────────────────────────────
 # Path is relative to this .nsi (build/windows/installer/) → repo-root LICENSE.
