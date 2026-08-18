@@ -173,6 +173,10 @@ func (v *Vault) RecoverWithKey(recoveryCode string, newPassword []byte) error {
 		return err
 	}
 
+	// Recovery is the escape hatch from a lockout — clear the throttle so the freshly
+	// re-keyed password isn't blocked by a stale lockout window.
+	v.resetUnlockFailures()
+
 	// Leave the vault unlocked with a private copy of the DEK.
 	v.mu.Lock()
 	v.dek = append([]byte(nil), dek...)

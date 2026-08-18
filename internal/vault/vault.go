@@ -223,6 +223,14 @@ func (v *Vault) Unlock(password []byte) error {
 		return ErrNotInitialized
 	}
 
+	// Throttle: if a previous burst of failures set a lockout window, refuse before
+	// spending Argon2id — this both enforces the wait and avoids wasting CPU on an
+	// attacker's guesses.
+	if v.LockoutRemaining() > 0 {
+		_ = audit.Log(v.db.SQL(), v.actor, "unlock", "", audit.Deny, "locked out")
+		return ErrTooManyAttempts
+	}
+
 	var (
 		p        crypto.KDFParams
 		salt     []byte
@@ -239,11 +247,13 @@ func (v *Vault) Unlock(password []byte) error {
 
 	if !crypto.CheckVerifier(kek, verifier) {
 		_ = audit.Log(v.db.SQL(), v.actor, "unlock", "", audit.Deny, "wrong password")
+		v.recordUnlockFailure()
 		return ErrWrongPassword
 	}
 	dek, err := crypto.UnwrapKey(kek, wrapped)
 	if err != nil {
 		_ = audit.Log(v.db.SQL(), v.actor, "unlock", "", audit.Deny, "unwrap failed")
+		v.recordUnlockFailure()
 		return ErrWrongPassword
 	}
 
@@ -253,6 +263,7 @@ func (v *Vault) Unlock(password []byte) error {
 	v.touch()
 	v.mu.Unlock()
 
+	v.resetUnlockFailures()
 	_ = audit.Log(v.db.SQL(), v.actor, "unlock", "", audit.Allow, "")
 	return nil
 }
