@@ -32,6 +32,17 @@ Download the latest build from the [**Releases**](https://github.com/deepakvamsi
 
 Builds are produced automatically by CI ([`.github/workflows/release.yml`](.github/workflows/release.yml)) on every `v*` tag. Prefer to build it yourself? See [Install](#-install).
 
+**Verify your download.** Each release ships a `SHA256SUMS` file. Compare it against your download:
+
+```bash
+# Windows (PowerShell)
+Get-FileHash .\Kosh-<version>-windows-amd64.exe -Algorithm SHA256
+# Linux / macOS
+sha256sum Kosh-<version>-linux-amd64
+```
+
+> **First-run warning on Windows.** Until releases are code-signed you may see Windows SmartScreen say *"Windows protected your PC / unknown publisher."* That reflects the *absence of a paid signing certificate*, not a problem with the app — verify the checksum above and choose **More info → Run anyway**. Signed builds (no warning) are on the roadmap.
+
 ---
 
 ## The problem

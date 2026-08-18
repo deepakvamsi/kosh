@@ -51,6 +51,26 @@ single biggest thing that makes an install feel untrustworthy. An OV cert signs;
 cert also clears SmartScreen reputation immediately. Azure Trusted Signing is a modern
 alternative to a physical token.
 
+### 3a. Sign automatically in CI
+
+The release workflow (`.github/workflows/release.yml`) signs the Windows `.exe` and NSIS
+installer automatically **when — and only when — these repository secrets are present**:
+
+| Secret | Value |
+| ------ | ----- |
+| `WINDOWS_PFX_BASE64` | Your code-signing `.pfx`, base64-encoded |
+| `WINDOWS_PFX_PASSWORD` | The `.pfx` password |
+
+Produce the base64 blob (do **not** commit the `.pfx` itself — it's in `.gitignore`):
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\certs\kosh-codesign.pfx")) | Set-Clipboard
+```
+
+Then add both under **GitHub → repo → Settings → Secrets and variables → Actions**. Until
+you do, releases build and publish **unsigned** — with a `SHA256SUMS` file either way so
+downloaders can verify integrity.
+
 ## Notes
 
 - **WebView2**: the Wails app needs the WebView2 runtime. It ships with current Windows

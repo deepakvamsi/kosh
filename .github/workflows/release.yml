@@ -4,8 +4,11 @@ name: Release
 # version tag (e.g. v0.1.0) is pushed:
 #   git tag v0.1.0 && git push origin v0.1.0
 #
-# Note: these builds are NOT code-signed. For signed production releases, run the signing
-# step in packaging/windows/ before/after publishing (or add your cert as a CI secret).
+# Code-signing is OPTIONAL and automatic: if the repository secrets WINDOWS_PFX_BASE64
+# (base64 of your code-signing .pfx) and WINDOWS_PFX_PASSWORD are set, the Windows binary
+# and installer are Authenticode-signed so SmartScreen shows a real publisher. If those
+# secrets are absent, the release still builds — just unsigned. Every artifact is published
+# with a SHA256SUMS file so downloaders can verify integrity either way.
 
 on:
   push:
@@ -17,6 +20,9 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    env:
+      WINDOWS_PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
+      WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -28,12 +34,31 @@ jobs:
       - name: Build (Windows + NSIS installer)
         working-directory: cmd/localvault
         run: wails build -platform windows/amd64 -nsis
+      - name: Code-sign (runs only if signing secrets are configured)
+        if: ${{ env.WINDOWS_PFX_BASE64 != '' }}
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'kosh-codesign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
+          $env:KOSH_SIGN_PFX = $pfx
+          $env:KOSH_SIGN_PFX_PW = $env:WINDOWS_PFX_PASSWORD
+          try {
+            ./packaging/windows/sign.ps1 -File cmd/localvault/build/bin/Kosh.exe
+            Get-ChildItem cmd/localvault/build/bin/*installer.exe -ErrorAction SilentlyContinue |
+              ForEach-Object { ./packaging/windows/sign.ps1 -File $_.FullName }
+          } finally {
+            Remove-Item $pfx -Force -ErrorAction SilentlyContinue
+          }
       - name: Stage artifacts
         shell: bash
         run: |
           mkdir dist-artifacts
           cp cmd/localvault/build/bin/Kosh.exe "dist-artifacts/Kosh-${GITHUB_REF_NAME}-windows-amd64.exe"
           cp cmd/localvault/build/bin/*installer.exe "dist-artifacts/Kosh-${GITHUB_REF_NAME}-windows-amd64-setup.exe" || true
+      - name: Checksums
+        shell: bash
+        working-directory: dist-artifacts
+        run: sha256sum * > SHA256SUMS-windows.txt
       - uses: softprops/action-gh-release@v2
         with:
           files: dist-artifacts/*
@@ -64,6 +89,9 @@ jobs:
           mkdir dist-artifacts
           cp cmd/localvault/build/bin/Kosh "dist-artifacts/Kosh-${GITHUB_REF_NAME}-linux-amd64"
           cp *.deb dist-artifacts/ || true
+      - name: Checksums
+        working-directory: dist-artifacts
+        run: sha256sum * > SHA256SUMS-linux.txt
       - uses: softprops/action-gh-release@v2
         with:
           files: dist-artifacts/*
