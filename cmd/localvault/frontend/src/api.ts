@@ -9,6 +9,7 @@ declare global {
           IsUnlocked(): Promise<boolean>
           InitVault(password: string): Promise<BoolResult>
           Unlock(password: string): Promise<BoolResult>
+          UnlockStatus(): Promise<number>
           Lock(): Promise<void>
           Touch(): Promise<void>
           HasRecoveryKey(): Promise<boolean>
@@ -53,6 +54,7 @@ export const api = {
   isUnlocked:    ()                          => go().IsUnlocked(),
   initVault:     (pw: string)                => go().InitVault(pw),
   unlock:        (pw: string)                => go().Unlock(pw),
+  unlockStatus:  ()                          => go().UnlockStatus(),
   lock:          ()                          => go().Lock(),
   touch:         ()                          => go().Touch(),
 

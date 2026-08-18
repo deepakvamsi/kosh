@@ -168,6 +168,16 @@ func (a *App) Unlock(password string) BoolResult {
 	return fail(a.vault.Unlock([]byte(password)))
 }
 
+// UnlockStatus returns the seconds the vault is currently locked out for after repeated
+// failed attempts (0 if an unlock may be tried now). The unlock screen polls this to show
+// a countdown and disable the button; it survives app restarts.
+func (a *App) UnlockStatus() int {
+	if a.vault == nil {
+		return 0
+	}
+	return a.vault.LockoutRemaining()
+}
+
 func (a *App) Lock() {
 	if a.vault != nil {
 		a.vault.Lock()

@@ -14,6 +14,9 @@ export default function UnlockScreen({ onUnlocked }: Props) {
   const [loading, setLoading] = useState(false)
   const [isNew, setIsNew] = useState<boolean | null>(null)
   const [confirm, setConfirm] = useState('')
+  const [lockSeconds, setLockSeconds] = useState(0)
+
+  const fmtWait = (s: number) => (s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`)
 
   // Recovery flow
   const [recoverMode, setRecoverMode] = useState(false)
@@ -25,7 +28,17 @@ export default function UnlockScreen({ onUnlocked }: Props) {
   React.useEffect(() => {
     api.isInitialized().then(v => setIsNew(!v))
     api.hasRecoveryKey().then(setHasRecovery)
+    api.unlockStatus().then(setLockSeconds).catch(() => {})
   }, [])
+
+  // Count the lockout down once per second; it resumes correctly after a restart because
+  // the backend persists the remaining time.
+  const locked = lockSeconds > 0
+  React.useEffect(() => {
+    if (!locked) return
+    const id = setInterval(() => setLockSeconds(s => (s <= 1 ? 0 : s - 1)), 1000)
+    return () => clearInterval(id)
+  }, [locked])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -45,7 +58,10 @@ export default function UnlockScreen({ onUnlocked }: Props) {
     try {
       const res = isNew ? await api.initVault(password) : await api.unlock(password)
       if (res.err) {
-        setError(res.err === 'vault: wrong password' ? 'Wrong password' : res.err)
+        const tooMany = res.err.includes('too many failed')
+        setError(tooMany ? 'Too many failed attempts — temporarily locked' : res.err === 'vault: wrong password' ? 'Wrong password' : res.err)
+        // Refresh the lockout countdown (a failed attempt may have just tripped it).
+        if (!isNew) api.unlockStatus().then(setLockSeconds).catch(() => {})
       } else {
         onUnlocked()
       }
@@ -170,12 +186,18 @@ export default function UnlockScreen({ onUnlocked }: Props) {
 
           {error && <p className="text-xs text-[rgb(var(--danger))]">{error}</p>}
 
+          {!isNew && locked && (
+            <p className="text-xs text-[rgb(var(--danger))]">
+              Too many failed attempts. Try again in {fmtWait(lockSeconds)}.
+            </p>
+          )}
+
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || (!isNew && locked)}
             className="rounded-lg bg-[rgb(var(--accent))] px-4 py-3 text-sm font-medium text-white hover:bg-[rgb(var(--accent-hover))] disabled:opacity-50 transition-colors"
           >
-            {loading ? '…' : isNew ? 'Create Vault' : 'Unlock'}
+            {loading ? '…' : isNew ? 'Create Vault' : locked ? `Locked — ${fmtWait(lockSeconds)}` : 'Unlock'}
           </button>
 
           {!isNew && hasRecovery && (
