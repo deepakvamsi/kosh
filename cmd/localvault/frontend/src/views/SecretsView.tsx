@@ -205,7 +205,7 @@ export default function SecretsView() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
-                        {s.tags.map(t => (
+                        {(s.tags ?? []).map(t => (
                           <span key={t} className="rounded bg-[rgb(var(--border)/0.6)] px-1.5 py-0.5 text-xs text-[rgb(var(--text-muted))]">{t}</span>
                         ))}
                       </div>
