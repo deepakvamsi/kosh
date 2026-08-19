@@ -12,7 +12,7 @@ Run the installer. It will:
 - Copy `Kosh.exe` to `%ProgramFiles%\Deepak Vamsi\Kosh\`
 - Create a Desktop shortcut and a Start-menu folder
 - Register in **Settings → Apps → Installed apps** (fully uninstallable from there)
-- Offer **"Pin to Start"** and **"Launch now"** on the final page
+- Offer **"Launch now"** on the final page
 
 ### Uninstall (3 ways, all fully supported)
 1. **Settings → Apps → Installed Apps → Kosh → Uninstall**
@@ -21,7 +21,7 @@ Run the installer. It will:
 
 The uninstaller removes:
 - The program directory
-- All shortcuts (Desktop, Start Menu, pinned)
+- All shortcuts (Desktop, Start Menu)
 - The Add/Remove Programs registry entry
 - The WebView2 data cache (`%AppData%\Kosh.exe`)
 - **Does NOT delete your vault database** at `%AppData%\Kosh\vault.db` — your secrets are preserved
@@ -47,12 +47,9 @@ killall Dock
 
 ### Uninstall
 ```bash
-# Remove the app
 rm -rf /Applications/Kosh.app
-# Remove the vault database (ONLY if you want to delete all secrets)
+# Optional — delete vault data
 rm -rf ~/Library/Application\ Support/Kosh
-# Remove Dock entry (drag icon off Dock normally, or)
-defaults write com.apple.dock persistent-apps -array  # resets dock
 ```
 
 ---
@@ -66,7 +63,7 @@ GOOS=linux GOARCH=amd64 wails build
 # Output: build/bin/Kosh-linux-amd64
 
 sudo install -Dm755 build/bin/Kosh-linux-amd64 /usr/local/bin/Kosh
-sudo install -Dm644 packaging/linux/localvault.desktop /usr/share/applications/localvault.desktop
+sudo install -Dm644 packaging/linux/kosh.desktop /usr/share/applications/kosh.desktop
 ```
 
 ### Pin to launcher / taskbar
@@ -78,7 +75,7 @@ Most desktop environments pick up the `.desktop` file automatically after instal
 ### Uninstall
 ```bash
 sudo rm /usr/local/bin/Kosh
-sudo rm /usr/share/applications/localvault.desktop
+sudo rm /usr/share/applications/kosh.desktop
 # Optional — delete vault data
 rm -rf ~/.local/share/Kosh
 ```
@@ -89,10 +86,10 @@ rm -rf ~/.local/share/Kosh
 mkdir -p packaging/linux/deb/usr/local/bin
 cp build/bin/Kosh-linux-amd64 packaging/linux/deb/usr/local/bin/Kosh
 mkdir -p packaging/linux/deb/usr/share/applications
-cp packaging/linux/localvault.desktop packaging/linux/deb/usr/share/applications/
-dpkg-deb --build packaging/linux/deb localvault_1.0.0_amd64.deb
+cp packaging/linux/kosh.desktop packaging/linux/deb/usr/share/applications/
+dpkg-deb --build packaging/linux/deb kosh_1.0.0_amd64.deb
 # Install:
-sudo dpkg -i localvault_1.0.0_amd64.deb
+sudo dpkg -i kosh_1.0.0_amd64.deb
 # Uninstall:
-sudo dpkg -r localvault
+sudo dpkg -r kosh
 ```

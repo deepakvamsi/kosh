@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Kosh — Linux packaging script
 # Produces:  build/bin/Kosh-linux-amd64.AppImage
-#            build/bin/localvault_1.0.0_amd64.deb
+#            build/bin/kosh_1.0.0_amd64.deb
 #
 # Run on:    Ubuntu 22.04 / Debian 12 (or compatible) x86_64
 # Requires:  go 1.25+, node 20+, appimage-builder (pip), dpkg-deb, fakeroot

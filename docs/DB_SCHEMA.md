@@ -1,126 +1,189 @@
-# Kosh — Database Schema (v1)
+# Kosh — Database Schema (current)
 
-Pure-Go SQLite (`modernc.org/sqlite`, no CGO). Secret **values** are always stored as
-AEAD ciphertext (`nonce || ciphertext || tag`). No plaintext secret is ever written.
-Timestamps are Unix seconds (UTC). Booleans are `INTEGER` 0/1.
+Pure-Go SQLite (`modernc.org/sqlite`, no CGO). Secret values always stored as AEAD ciphertext (`nonce || ciphertext || tag`). No plaintext secret ever written.
 
 ## Migration framework
 
-Migrations live in `internal/storage/migrations/` as ordered `NNNN_name.sql` files and
-are applied in a transaction. `schema_migrations(version INTEGER PRIMARY KEY, applied_at)`
-tracks what has run. `vault_meta.schema_version` mirrors the latest applied version.
+Migrations live in `internal/storage/migrations/` as ordered `NNNN_name.sql` files, embedded into the binary at compile time with `//go:embed`. Applied automatically on every `Open()` in ascending numeric order.
+
+**Key properties:**
+- Each migration runs in its own transaction.
+- `ALTER TABLE … ADD COLUMN` errors with "duplicate column name" are silently ignored — so every migration is safe against a partially-upgraded database.
+- `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS` are used for all idempotent DDL.
+- `schema_migrations(version, applied_at)` tracks which migrations have been applied.
+- Migration `0005_schema_solidify` is the catch-all guard: it re-adds every column from 0002–0004 so any `vault.db` created from a pre-solidification binary is automatically upgraded on the next launch.
+
+**Applied migrations:**
+
+| Version | File | What it adds |
+|---------|------|-------------|
+| 1 | `0001_init.sql` | All core tables: `vault_meta`, `providers`, `folders`, `secrets`, `tags`, `secret_tags`, `audit_log`, `settings` |
+| 2 | `0002_custom_fields.sql` | `secrets.custom_fields TEXT DEFAULT '{}'` |
+| 3 | `0003_item_type.sql` | `secrets.item_type TEXT DEFAULT 'api_key' CHECK (…)` |
+| 4 | `0004_totp_favorites_history.sql` | `secrets.is_favorite`, `secrets.totp_enc`, `secret_history` table |
+| 5 | `0005_schema_solidify.sql` | Idempotent guards — re-adds all 0002–0004 columns if missing |
+
+---
 
 ## Tables
 
-### vault_meta (single row, id = 1)
-```sql
-CREATE TABLE vault_meta (
-  id             INTEGER PRIMARY KEY CHECK (id = 1),
-  kdf            TEXT    NOT NULL,     -- "argon2id"
-  kdf_time       INTEGER NOT NULL,
-  kdf_memory_kib INTEGER NOT NULL,
-  kdf_threads    INTEGER NOT NULL,
-  kdf_salt       BLOB    NOT NULL,
-  verifier       BLOB    NOT NULL,     -- AEAD verifier blob
-  dek_wrapped    BLOB    NOT NULL,     -- DEK wrapped by password KEK
-  recovery_salt  BLOB,                 -- for recovery-key KDF (nullable)
-  dek_recovery   BLOB,                 -- DEK wrapped by recovery KEK (nullable)
-  schema_version INTEGER NOT NULL,
-  created_at     INTEGER NOT NULL,
-  updated_at     INTEGER NOT NULL
-);
-```
+### `vault_meta` (single row, id=1)
 
-### providers
-```sql
-CREATE TABLE providers (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  key        TEXT NOT NULL UNIQUE,     -- "aws","gcp","openai","anthropic",...,"custom"
-  name       TEXT NOT NULL,            -- display name
-  category   TEXT NOT NULL,            -- "cloud","ai","vcs","db","platform","custom"
-  is_builtin INTEGER NOT NULL DEFAULT 1,
-  created_at INTEGER NOT NULL
-);
-```
-Seeded built-ins: AWS, GCP, Azure, OpenAI, Anthropic, Gemini, Grok/xAI, Mistral, Groq,
-DeepSeek, OpenRouter, GitHub, GitLab, Bitbucket, Cursor, Replit, Vercel, Cloudflare,
-Docker, PostgreSQL, MongoDB, Redis, and Custom.
+Stores the vault's key material. No plaintext master password is ever stored.
 
-### folders
-```sql
-CREATE TABLE folders (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  name       TEXT NOT NULL,
-  parent_id  INTEGER REFERENCES folders(id) ON DELETE CASCADE,
-  created_at INTEGER NOT NULL,
-  UNIQUE(parent_id, name)
-);
-```
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PK | Always 1 |
+| `kdf` | TEXT | Algorithm name, always `"argon2id"` |
+| `kdf_time` | INTEGER | Argon2id time cost |
+| `kdf_memory_kib` | INTEGER | Argon2id memory cost in KiB |
+| `kdf_threads` | INTEGER | Argon2id parallelism |
+| `kdf_salt` | BLOB | 16-byte random per-vault salt |
+| `verifier` | BLOB | Proof token used to check the master password without exposing the DEK |
+| `dek_wrapped` | BLOB | DEK encrypted under the KEK (Argon2id of master password) |
+| `recovery_salt` | BLOB | Nullable; present only if recovery key was generated |
+| `dek_recovery` | BLOB | Nullable; DEK wrapped under the recovery KEK |
+| `schema_version` | INTEGER | Legacy field (schema is now tracked in `schema_migrations`) |
+| `created_at` | INTEGER | Unix timestamp |
+| `updated_at` | INTEGER | Unix timestamp |
 
-### secrets
-```sql
-CREATE TABLE secrets (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  alias         TEXT NOT NULL UNIQUE,        -- "OPENAI_DEV","AWS_PROD","GITHUB_DEV"
-  provider_id   INTEGER NOT NULL REFERENCES providers(id),
-  environment   TEXT NOT NULL CHECK (environment IN ('dev','qa','staging','prod')),
-  folder_id     INTEGER REFERENCES folders(id) ON DELETE SET NULL,
-  description   TEXT,
-  value_enc     BLOB NOT NULL,               -- nonce||ciphertext||tag (never plaintext)
-  value_hash    BLOB NOT NULL,               -- HMAC/keyed hash for duplicate detection (not reversible)
-  created_at    INTEGER NOT NULL,
-  updated_at    INTEGER NOT NULL,
-  last_used_at  INTEGER,                      -- for "unused" detection
-  expires_at    INTEGER,                      -- rotation/expiry tracking (nullable)
-  rotation_days INTEGER,                      -- recommended rotation interval (nullable)
-  is_archived   INTEGER NOT NULL DEFAULT 0
-);
-CREATE INDEX idx_secrets_provider ON secrets(provider_id);
-CREATE INDEX idx_secrets_env      ON secrets(environment);
-CREATE INDEX idx_secrets_expires  ON secrets(expires_at);
-CREATE INDEX idx_secrets_valhash  ON secrets(value_hash);
-```
-`value_hash` is a keyed hash (HMAC with a vault-scoped subkey) so we can detect
-**duplicate** credentials without ever comparing plaintext or enabling offline
-dictionary attacks on the hashes.
+---
 
-### tags & secret_tags
-```sql
-CREATE TABLE tags (
-  id   INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL UNIQUE
-);
-CREATE TABLE secret_tags (
-  secret_id INTEGER NOT NULL REFERENCES secrets(id) ON DELETE CASCADE,
-  tag_id    INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
-  PRIMARY KEY (secret_id, tag_id)
-);
-```
+### `providers`
 
-### audit_log (append-only, hash-chained)
-```sql
-CREATE TABLE audit_log (
-  seq        INTEGER PRIMARY KEY AUTOINCREMENT,
-  ts         INTEGER NOT NULL,
-  actor      TEXT NOT NULL,        -- always the in-app UI session, e.g. "ui"
-  action     TEXT NOT NULL,        -- "unlock","reveal","copy","create","update","delete","backup","autolock"
-  target     TEXT,                 -- alias or resource, never the secret value
-  outcome    TEXT NOT NULL,        -- "allow" | "deny"
-  detail     TEXT,                 -- non-secret context (reason for deny, etc.)
-  prev_hash  BLOB NOT NULL,
-  hash       BLOB NOT NULL         -- SHA-256(prev_hash || canonical(record))
-);
-```
+Built-in and custom providers (AWS, OpenAI, GitHub, …). Seeded idempotently on every `Open()`.
 
-### settings (key/value, non-secret app config)
-```sql
-CREATE TABLE settings (
-  key   TEXT PRIMARY KEY,          -- "theme","autolock_seconds","clipboard_clear_seconds","mcp_enabled"
-  value TEXT NOT NULL
-);
-```
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PK AUTOINCREMENT | |
+| `key` | TEXT UNIQUE | Short identifier, e.g. `aws`, `openai` |
+| `name` | TEXT | Display name |
+| `category` | TEXT | `cloud` / `ai` / `vcs` / `platform` / `db` / `custom` |
+| `is_builtin` | INTEGER | 1 = shipped with Kosh, 0 = user-added |
+| `created_at` | INTEGER | Unix timestamp |
+
+**Built-in providers:** aws, gcp, azure, openai, anthropic, gemini, xai, mistral, groq, deepseek, openrouter, github, gitlab, bitbucket, cursor, replit, vercel, cloudflare, docker, postgresql, mongodb, redis, custom
+
+---
+
+### `folders`
+
+Optional hierarchical folders for organising secrets.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PK AUTOINCREMENT | |
+| `name` | TEXT | Folder display name |
+| `parent_id` | INTEGER FK → `folders(id)` ON DELETE CASCADE | Nullable; enables nesting |
+| `created_at` | INTEGER | Unix timestamp |
+
+UNIQUE constraint: `(parent_id, name)`
+
+---
+
+### `secrets` — core table
+
+Every row holds one vault item. **`value_enc` is always ciphertext. No row ever holds a plaintext secret.**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PK AUTOINCREMENT | Used as associated data in AEAD — ciphertext is bound to this row |
+| `alias` | TEXT UNIQUE | Human name, e.g. `OPENAI_PROD` |
+| `item_type` | TEXT DEFAULT `'api_key'` | `api_key` / `login` / `secure_note` |
+| `provider_id` | INTEGER FK → `providers(id)` | |
+| `environment` | TEXT CHECK (`dev`/`qa`/`staging`/`prod`) | |
+| `folder_id` | INTEGER FK → `folders(id)` ON DELETE SET NULL | Nullable |
+| `description` | TEXT | Nullable freeform note (stored in clear) |
+| `value_enc` | BLOB | `nonce \|\| ciphertext \|\| Poly1305 tag` |
+| `value_hash` | BLOB | Keyed HMAC of the plaintext for duplicate detection (not reversible) |
+| `custom_fields` | TEXT DEFAULT `'{}'` | JSON key-value metadata (not secret, stored in clear) |
+| `is_favorite` | INTEGER DEFAULT `0` | 1 = pinned to top of list |
+| `totp_enc` | BLOB | Nullable; encrypted TOTP seed. Same AEAD scheme as `value_enc` with domain tag `\|totp` |
+| `created_at` | INTEGER | Unix timestamp |
+| `updated_at` | INTEGER | Unix timestamp |
+| `last_used_at` | INTEGER | Nullable; updated on reveal/copy |
+| `expires_at` | INTEGER | Nullable; Unix timestamp |
+| `rotation_days` | INTEGER | Nullable; days between recommended rotations |
+| `is_archived` | INTEGER DEFAULT `0` | Soft-delete flag |
+
+**Indexes:** `provider_id`, `environment`, `expires_at`, `value_hash`, `item_type`, `is_favorite`
+
+---
+
+### `tags` + `secret_tags`
+
+Many-to-many tags.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `tags.id` | INTEGER PK AUTOINCREMENT | |
+| `tags.name` | TEXT UNIQUE | Tag label |
+| `secret_tags.secret_id` | INTEGER FK → `secrets(id)` ON DELETE CASCADE | |
+| `secret_tags.tag_id` | INTEGER FK → `tags(id)` ON DELETE CASCADE | |
+
+---
+
+### `secret_history`
+
+Previous encrypted values retained whenever `UpdateValue` is called, so historical values can be revealed/restored by the user.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PK AUTOINCREMENT | |
+| `secret_id` | INTEGER FK → `secrets(id)` ON DELETE CASCADE | |
+| `value_enc` | BLOB | Previous ciphertext (same AEAD scheme, same associated data as the live row) |
+| `value_hash` | BLOB | Keyed HMAC of the previous plaintext |
+| `changed_at` | INTEGER | Unix timestamp of when the value was replaced |
+
+**Index:** `secret_id`
+
+---
+
+### `audit_log` — append-only, tamper-evident
+
+Every sensitive operation is written here. The hash chain makes any after-the-fact deletion or editing detectable.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `seq` | INTEGER PK AUTOINCREMENT | Monotonically increasing |
+| `ts` | INTEGER | Unix timestamp |
+| `actor` | TEXT | Session identifier, e.g. `"ui"` |
+| `action` | TEXT | `create` / `reveal` / `update` / `delete` / `archive` / `unlock` / `lock` / `init` / `totp_set` / `set_custom_fields` / … |
+| `target` | TEXT | Secret alias or empty string |
+| `outcome` | TEXT | `allow` or `deny` |
+| `detail` | TEXT | Freeform context (e.g. `"wrong password"`) |
+| `prev_hash` | BLOB | SHA-256 of the previous row's `hash` field |
+| `hash` | BLOB | `SHA-256(prev_hash ‖ canonical(record))` — the chain link |
+
+---
+
+### `settings`
+
+Simple key-value config store. All values are strings.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `autolock_seconds` | `300` | Idle auto-lock timeout (0 = disabled) |
+| `clipboard_clear_seconds` | `30` | How long before clipboard is wiped after a copy |
+| `theme` | `dark` | `dark` or `light` |
+
+---
+
+### `schema_migrations`
+
+Internal table used by the migration runner.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `version` | INTEGER PK | Numeric prefix of the migration filename |
+| `applied_at` | INTEGER | Unix timestamp when the migration was applied |
+
+---
 
 ## Notes
-- No table stores plaintext secrets or the master password.
-- `value_enc` and all backup blobs are AEAD-protected.
-- Foreign keys are enforced (`PRAGMA foreign_keys=ON`); journaling uses WAL.
+
+- Foreign keys are enforced (`PRAGMA foreign_keys = ON`).
+- WAL journal mode (`PRAGMA journal_mode = WAL`) for safe concurrent reads during a write.
+- Single max-open-connection to simplify WAL serialization in a desktop app.
+- File permissions are hardened to the current OS user on first open (Windows DACL / Unix `chmod 0600`).
+- The database file itself is not encrypted at the OS level (app-layer encryption). `secrets.value_enc` and `totp_enc` are AEAD-encrypted; all other columns are stored in clear.

@@ -1,6 +1,9 @@
 package storage
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestOpenRunsMigrationsAndSeeds(t *testing.T) {
 	db, err := OpenMemory()
@@ -17,7 +20,6 @@ func TestOpenRunsMigrationsAndSeeds(t *testing.T) {
 		t.Fatalf("expected >=20 seeded providers, got %d", n)
 	}
 
-	// vault_meta table must exist (query should not error).
 	var meta int
 	if err := db.SQL().QueryRow(`SELECT count(*) FROM vault_meta`).Scan(&meta); err != nil {
 		t.Fatalf("vault_meta not created: %v", err)
@@ -47,11 +49,62 @@ func TestMigrationsRecorded(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	var v int
-	if err := db.SQL().QueryRow(`SELECT max(version) FROM schema_migrations`).Scan(&v); err != nil {
-		t.Fatalf("schema_migrations: %v", err)
+
+	v, err := SchemaVersion(db.SQL())
+	if err != nil {
+		t.Fatalf("SchemaVersion: %v", err)
 	}
-	if v < 1 {
-		t.Fatalf("expected migration version >=1, got %d", v)
+	if v < 5 {
+		t.Fatalf("expected schema version >=5 (all migrations applied), got %d", v)
+	}
+}
+
+func TestAllColumnsExist(t *testing.T) {
+	db, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	cols := []struct {
+		table  string
+		column string
+	}{
+		{"secrets", "custom_fields"},
+		{"secrets", "item_type"},
+		{"secrets", "is_favorite"},
+		{"secrets", "totp_enc"},
+	}
+	for _, c := range cols {
+		q := fmt.Sprintf(`SELECT %s FROM %s LIMIT 0`, c.column, c.table)
+		if _, err := db.SQL().Exec(q); err != nil {
+			t.Errorf("column %s.%s missing: %v", c.table, c.column, err)
+		}
+	}
+
+	var hist int
+	if err := db.SQL().QueryRow(`SELECT count(*) FROM secret_history`).Scan(&hist); err != nil {
+		t.Errorf("secret_history table missing: %v", err)
+	}
+}
+
+func TestMigrationIdempotent(t *testing.T) {
+	db, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if err := migrate(db.SQL()); err != nil {
+		t.Fatalf("second migrate() call failed: %v", err)
+	}
+
+	if err := migrate(db.SQL()); err != nil {
+		t.Fatalf("third migrate() call failed: %v", err)
+	}
+
+	v, _ := SchemaVersion(db.SQL())
+	if v < 5 {
+		t.Fatalf("schema version should still be >=5 after re-runs, got %d", v)
 	}
 }
