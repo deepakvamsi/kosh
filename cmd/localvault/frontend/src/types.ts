@@ -1,4 +1,4 @@
-export type ItemType = 'api_key' | 'login' | 'secure_note'
+export type ItemType = 'api_key' | 'login' | 'secure_note' | 'keypair'
 
 export type SecretSummary = {
   id: number
@@ -22,10 +22,12 @@ export type SecretSummary = {
 // itemType are populated.
 export type RevealedItem = {
   itemType: ItemType
-  value: string    // api_key
-  username: string // login
-  password: string // login
-  note: string     // secure_note
+  value: string     // api_key
+  username: string  // login
+  password: string  // login
+  note: string      // secure_note
+  accessKey: string // keypair
+  secretKey: string // keypair
   err?: string
 }
 
@@ -70,23 +72,14 @@ export type AddSecretInput = {
   providerKey: string
   environment: string
   description: string
-  value: string     // api_key
-  username?: string // login
-  password?: string // login
-  note?: string     // secure_note
+  value: string      // api_key
+  username?: string  // login
+  password?: string  // login
+  note?: string      // secure_note
+  accessKey?: string // keypair
+  secretKey?: string // keypair
   expiresAt?: number | null
   rotationDays?: number | null
-}
-
-export type AddKeyPairInput = {
-  accessKeyAlias: string
-  accessKeyValue: string
-  secretKeyAlias: string
-  secretKeyValue: string
-  providerKey: string
-  environment: string
-  description: string
-  expiresAt?: number | null
 }
 
 export type ColMapDTO = {

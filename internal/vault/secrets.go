@@ -23,6 +23,8 @@ type AddSecretInput struct {
 	Username     string // ItemLogin: account identifier (encrypted with the payload)
 	Password     string // ItemLogin: the password
 	Note         string // ItemSecureNote: free-form note body
+	AccessKey    string // ItemKeyPair: the access key (e.g. AWS access key id)
+	SecretKey    string // ItemKeyPair: the secret key
 	TOTP         string // optional base32 TOTP seed (encrypted separately)
 	ExpiresAt    *int64
 	RotationDays *int
