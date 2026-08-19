@@ -23,6 +23,11 @@ declare global {
           DeleteSecret(alias: string): Promise<BoolResult>
           ArchiveSecret(alias: string, archived: boolean): Promise<BoolResult>
           TagSecret(alias: string, tag: string): Promise<BoolResult>
+          SetFavorite(alias: string, fav: boolean): Promise<BoolResult>
+          SetTOTP(alias: string, seed: string): Promise<BoolResult>
+          GetTOTPCode(alias: string): Promise<{ code: string; remaining: number; err?: string }>
+          ListHistory(alias: string): Promise<{ id: number; changedAt: number }[]>
+          RevealHistoryValue(alias: string, historyID: number): Promise<string>
           GetCustomFields(alias: string): Promise<string>
           SetCustomFields(alias: string, jsonFields: string): Promise<BoolResult>
           GetHealth(): Promise<HealthItem[]>
@@ -71,6 +76,13 @@ export const api = {
   deleteSecret:  (alias: string)             => go().DeleteSecret(alias),
   archiveSecret: (alias: string, v: boolean) => go().ArchiveSecret(alias, v),
   tagSecret:     (alias: string, tag: string)=> go().TagSecret(alias, tag),
+  setFavorite:   (alias: string, fav: boolean) => go().SetFavorite(alias, fav),
+
+  setTOTP:       (alias: string, seed: string) => go().SetTOTP(alias, seed),
+  getTOTPCode:   (alias: string)               => go().GetTOTPCode(alias),
+
+  listHistory:         (alias: string)                          => go().ListHistory(alias),
+  revealHistoryValue:  (alias: string, historyID: number)       => go().RevealHistoryValue(alias, historyID),
 
   getCustomFields: (alias: string)                     => go().GetCustomFields(alias),
   setCustomFields: (alias: string, json: string)       => go().SetCustomFields(alias, json),

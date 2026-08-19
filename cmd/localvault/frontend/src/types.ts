@@ -13,6 +13,8 @@ export type SecretSummary = {
   expiresAt: number | null
   lastUsedAt: number | null
   isArchived: boolean
+  isFavorite: boolean
+  hasTOTP: boolean
   customFields: string
 }
 

@@ -37,6 +37,8 @@ type SecretSummary struct {
 	ExpiresAt    *int64
 	LastUsedAt   *int64
 	IsArchived   bool
+	IsFavorite   bool
+	HasTOTP      bool
 	CustomFields string
 }
 
@@ -50,6 +52,7 @@ func (v *Vault) ListNames(filter ListFilter) ([]SecretSummary, error) {
 	q := `SELECT s.id, s.alias, s.item_type, p.key, p.name,
 	             s.environment, COALESCE(s.description,''),
 	             s.expires_at, s.last_used_at, s.is_archived,
+	             s.is_favorite, (s.totp_enc IS NOT NULL),
 	             COALESCE(f.name,''), COALESCE(s.custom_fields,'{}')
 	        FROM secrets s
 	        JOIN providers p ON p.id=s.provider_id
@@ -73,7 +76,7 @@ func (v *Vault) ListNames(filter ListFilter) ([]SecretSummary, error) {
 		pat := "%" + filter.Search + "%"
 		args = append(args, pat, pat)
 	}
-	q += " ORDER BY s.created_at DESC"
+	q += " ORDER BY s.is_favorite DESC, s.created_at DESC"
 
 	rows, err := v.db.SQL().Query(q, args...)
 	if err != nil {
@@ -85,15 +88,17 @@ func (v *Vault) ListNames(filter ListFilter) ([]SecretSummary, error) {
 	for rows.Next() {
 		var s SecretSummary
 		var env, itemType string
-		var archived int
+		var archived, favorite, hasTotp int
 		var folderName string
 		if err := rows.Scan(&s.ID, &s.Alias, &itemType, &s.ProviderKey, &s.ProviderName,
-			&env, &s.Description, &s.ExpiresAt, &s.LastUsedAt, &archived, &folderName, &s.CustomFields); err != nil {
+			&env, &s.Description, &s.ExpiresAt, &s.LastUsedAt, &archived, &favorite, &hasTotp, &folderName, &s.CustomFields); err != nil {
 			return nil, err
 		}
 		s.ItemType = ItemType(itemType).normalize()
 		s.Environment = Environment(env)
 		s.IsArchived = archived == 1
+		s.IsFavorite = favorite == 1
+		s.HasTOTP = hasTotp == 1
 		s.FolderName = folderName
 		out = append(out, s)
 	}

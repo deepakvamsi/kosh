@@ -224,6 +224,9 @@ type SecretSummaryDTO struct {
 	ExpiresAt    *int64   `json:"expiresAt"`
 	LastUsedAt   *int64   `json:"lastUsedAt"`
 	IsArchived   bool     `json:"isArchived"`
+	IsFavorite   bool     `json:"isFavorite"`
+	HasTOTP      bool     `json:"hasTOTP"`
+	CustomFields string   `json:"customFields"`
 }
 
 func (a *App) ListSecrets(search, provider, env string, includeArchived bool) ([]SecretSummaryDTO, error) {
@@ -246,6 +249,7 @@ func (a *App) ListSecrets(search, provider, env string, includeArchived bool) ([
 			ProviderName: s.ProviderName, Environment: string(s.Environment),
 			Tags: s.Tags, FolderName: s.FolderName, Description: s.Description,
 			ExpiresAt: s.ExpiresAt, LastUsedAt: s.LastUsedAt, IsArchived: s.IsArchived,
+			IsFavorite: s.IsFavorite, HasTOTP: s.HasTOTP, CustomFields: s.CustomFields,
 		}
 	}
 	return out, nil
@@ -360,6 +364,64 @@ func (a *App) TagSecret(alias, tag string) BoolResult {
 		return BoolResult{Err: errVaultUnavailable.Error()}
 	}
 	return fail(a.vault.TagSecret(alias, tag))
+}
+
+func (a *App) SetFavorite(alias string, fav bool) BoolResult {
+	if a.vault == nil {
+		return BoolResult{Err: errVaultUnavailable.Error()}
+	}
+	return fail(a.vault.SetFavorite(alias, fav))
+}
+
+func (a *App) SetTOTP(alias, seed string) BoolResult {
+	if a.vault == nil {
+		return BoolResult{Err: errVaultUnavailable.Error()}
+	}
+	return fail(a.vault.SetTOTP(alias, seed))
+}
+
+type TOTPResult struct {
+	Code      string `json:"code"`
+	Remaining int    `json:"remaining"`
+	Err       string `json:"err,omitempty"`
+}
+
+func (a *App) GetTOTPCode(alias string) TOTPResult {
+	if a.vault == nil {
+		return TOTPResult{Err: errVaultUnavailable.Error()}
+	}
+	code, rem, err := a.vault.TOTPCode(alias)
+	if err != nil {
+		return TOTPResult{Err: err.Error()}
+	}
+	return TOTPResult{Code: code, Remaining: rem}
+}
+
+type HistoryEntryDTO struct {
+	ID        int64 `json:"id"`
+	ChangedAt int64 `json:"changedAt"`
+}
+
+func (a *App) ListHistory(alias string) ([]HistoryEntryDTO, error) {
+	if a.vault == nil {
+		return nil, errVaultUnavailable
+	}
+	entries, err := a.vault.ListHistory(alias)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]HistoryEntryDTO, len(entries))
+	for i, e := range entries {
+		out[i] = HistoryEntryDTO{ID: e.ID, ChangedAt: e.ChangedAt}
+	}
+	return out, nil
+}
+
+func (a *App) RevealHistoryValue(alias string, historyID int64) (string, error) {
+	if a.vault == nil {
+		return "", errVaultUnavailable
+	}
+	return a.vault.RevealHistoryValue(alias, historyID)
 }
 
 func (a *App) GetCustomFields(alias string) (string, error) {

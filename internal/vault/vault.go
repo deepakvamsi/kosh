@@ -81,6 +81,8 @@ type Secret struct {
 	ExpiresAt    *int64
 	RotationDays *int
 	Archived     bool
+	IsFavorite   bool
+	HasTOTP      bool
 }
 
 // Vault holds an opened database and, when unlocked, the in-memory DEK.

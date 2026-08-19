@@ -24,3 +24,18 @@ Thumbs.db
 # Signing material — never commit certs or passwords
 *.pfx
 *.p12
+
+# Vault database — contains encrypted user secrets, MUST NOT be committed
+*.db
+*.db-wal
+*.db-shm
+vault.db
+
+# Backup archives — encrypted but still sensitive
+*.lvbak
+
+# Environment / secret files
+.env
+.env.*
+*.pem
+*.key

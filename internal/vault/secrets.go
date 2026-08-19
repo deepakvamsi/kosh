@@ -23,6 +23,7 @@ type AddSecretInput struct {
 	Username     string // ItemLogin: account identifier (encrypted with the payload)
 	Password     string // ItemLogin: the password
 	Note         string // ItemSecureNote: free-form note body
+	TOTP         string // optional base32 TOTP seed (encrypted separately)
 	ExpiresAt    *int64
 	RotationDays *int
 }
@@ -95,6 +96,15 @@ func (v *Vault) AddSecret(in AddSecretInput) (int64, error) {
 	}
 	if _, err := tx.Exec(`UPDATE secrets SET value_enc=? WHERE id=?`, blob, id); err != nil {
 		return 0, fmt.Errorf("vault: store ciphertext: %w", err)
+	}
+	if in.TOTP != "" {
+		totpBlob, terr := v.encryptTOTP(dek, id, in.ProviderKey, in.Environment, in.TOTP)
+		if terr != nil {
+			return 0, terr
+		}
+		if _, err := tx.Exec(`UPDATE secrets SET totp_enc=? WHERE id=?`, totpBlob, id); err != nil {
+			return 0, fmt.Errorf("vault: store totp: %w", err)
+		}
 	}
 	if err := audit.LogTx(tx, v.actor, "create", in.Alias, audit.Allow, ""); err != nil {
 		return 0, fmt.Errorf("vault: audit create: %w", err)
@@ -185,10 +195,12 @@ func (v *Vault) UpdateValue(alias string, newValue []byte) error {
 		id          int64
 		providerKey string
 		env         string
+		oldEnc      []byte
+		oldHash     []byte
 	)
 	row := v.db.SQL().QueryRow(
-		`SELECT s.id, p.key, s.environment FROM secrets s JOIN providers p ON p.id=s.provider_id WHERE s.alias=?`, alias)
-	if err := row.Scan(&id, &providerKey, &env); err == sql.ErrNoRows {
+		`SELECT s.id, p.key, s.environment, s.value_enc, s.value_hash FROM secrets s JOIN providers p ON p.id=s.provider_id WHERE s.alias=?`, alias)
+	if err := row.Scan(&id, &providerKey, &env, &oldEnc, &oldHash); err == sql.ErrNoRows {
 		return ErrNotFound
 	} else if err != nil {
 		return err
@@ -201,13 +213,19 @@ func (v *Vault) UpdateValue(alias string, newValue []byte) error {
 	}
 	valueHash := crypto.KeyedHash(hm, newValue)
 
+	ts := time.Now().Unix()
 	tx, err := v.db.SQL().Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	// Retain the previous (still-encrypted) value so it can be viewed/restored later.
+	if _, err := tx.Exec(`INSERT INTO secret_history(secret_id,value_enc,value_hash,changed_at) VALUES(?,?,?,?)`,
+		id, oldEnc, oldHash, ts); err != nil {
+		return fmt.Errorf("vault: record history: %w", err)
+	}
 	if _, err := tx.Exec(`UPDATE secrets SET value_enc=?, value_hash=?, updated_at=? WHERE id=?`,
-		blob, valueHash, time.Now().Unix(), id); err != nil {
+		blob, valueHash, ts, id); err != nil {
 		return err
 	}
 	if err := audit.LogTx(tx, v.actor, "update", alias, audit.Allow, ""); err != nil {

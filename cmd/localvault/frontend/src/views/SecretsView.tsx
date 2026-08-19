@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, Fragment } from 'react'
 import { api } from '../api'
 import { SecretSummary, AddSecretInput, AddKeyPairInput, Provider, RevealedItem, ItemType } from '../types'
-import { Plus, Search, Eye, EyeOff, Copy, Trash2, Archive, RotateCcw, KeyRound, Link2, User, FileText } from 'lucide-react'
+import { Plus, Search, Eye, EyeOff, Copy, Trash2, Archive, RotateCcw, KeyRound, Link2, User, FileText, Star } from 'lucide-react'
 import CustomFieldsPanel from '../components/CustomFieldsPanel'
 import StrengthBar from '../components/StrengthBar'
+import TOTPPanel from '../components/TOTPPanel'
+import HistoryPanel from '../components/HistoryPanel'
 
 type RevealState = { alias: string; item: RevealedItem; timer: ReturnType<typeof setTimeout> | null }
 type AddMode = 'single' | 'keypair'
@@ -175,6 +177,9 @@ export default function SecretsView() {
                             <Link2 className="h-3 w-3 text-[rgb(var(--accent)/0.6)] shrink-0" />
                           </span>
                         )}
+                        {s.isFavorite && (
+                          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400 shrink-0" />
+                        )}
                         <span className="font-mono font-medium">{s.alias}</span>
                       </div>
                     </td>
@@ -194,6 +199,11 @@ export default function SecretsView() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5 justify-end">
+                        <button onClick={async () => { await api.setFavorite(s.alias, !s.isFavorite); load() }}
+                          title={s.isFavorite ? 'Unpin from favorites' : 'Pin to favorites'}
+                          className={`rounded p-1.5 hover:bg-white/10 transition-colors ${s.isFavorite ? 'text-yellow-400' : 'text-[rgb(var(--text-muted))] hover:text-yellow-400'}`}>
+                          <Star className={`h-3.5 w-3.5 ${s.isFavorite ? 'fill-yellow-400' : ''}`} />
+                        </button>
                         <button onClick={() => handleReveal(s.alias)} title={revealed?.alias === s.alias ? 'Hide' : 'Reveal'}
                           className="rounded p-1.5 text-[rgb(var(--text-muted))] hover:bg-white/10 hover:text-[rgb(var(--text))]">
                           {revealed?.alias === s.alias ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -217,6 +227,8 @@ export default function SecretsView() {
                     <tr className="bg-[rgb(var(--accent)/0.05)]">
                       <td colSpan={6} className="px-4 py-2">
                         <RevealedFields item={revealed.item} onCopy={copyValue} copied={copied} />
+                        <TOTPPanel alias={s.alias} hasTOTP={s.hasTOTP} onChanged={load} />
+                        <HistoryPanel alias={s.alias} />
                         <CustomFieldsPanel
                           alias={s.alias}
                           initialJson={s.customFields}

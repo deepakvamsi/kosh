@@ -77,6 +77,8 @@ type SecretRecord struct {
 	FolderID     *int64 `json:"folder,omitempty"`
 	CustomFields string `json:"custom,omitempty"`
 	IsArchived   bool   `json:"arch,omitempty"`
+	IsFavorite   bool   `json:"fav,omitempty"`
+	TOTPEnc      []byte `json:"totp,omitempty"` // encrypted TOTP seed, nil if none
 }
 
 // FolderRecord is one folder. ParentID is preserved so nested folder hierarchies survive
