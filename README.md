@@ -180,6 +180,16 @@ macOS:   ~/Library/Application Support/Kosh/vault.db
 Linux:   ~/.local/share/Kosh/vault.db
 ```
 
+### Upgrading keeps your data
+
+Your secrets live in `vault.db` in the OS user-data path above — **not** inside the
+app install folder. Installing a newer version (or replacing the portable `.exe`)
+does **not** touch that file, so **your vault, master password, and all secrets
+persist across upgrades**. On first launch after an upgrade, Kosh applies any
+pending schema migrations to the existing `vault.db` in place; nothing is
+re-created and nothing is lost. To start over deliberately, use
+**Settings → Reset Vault** (this permanently deletes `vault.db`).
+
 ---
 
 ## 🏗️ How it works

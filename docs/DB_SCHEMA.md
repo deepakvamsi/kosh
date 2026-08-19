@@ -22,6 +22,7 @@ Migrations live in `internal/storage/migrations/` as ordered `NNNN_name.sql` fil
 | 3 | `0003_item_type.sql` | `secrets.item_type TEXT DEFAULT 'api_key' CHECK (…)` |
 | 4 | `0004_totp_favorites_history.sql` | `secrets.is_favorite`, `secrets.totp_enc`, `secret_history` table |
 | 5 | `0005_schema_solidify.sql` | Idempotent guards — re-adds all 0002–0004 columns if missing |
+| 6 | `0006_drop_secret_history.sql` | Removes the `secret_history` table — value-history feature dropped; purges retained previous values on upgrade |
 
 ---
 
@@ -123,19 +124,12 @@ Many-to-many tags.
 
 ---
 
-### `secret_history`
+### `secret_history` — removed (migration 0006)
 
-Previous encrypted values retained whenever `UpdateValue` is called, so historical values can be revealed/restored by the user.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | INTEGER PK AUTOINCREMENT | |
-| `secret_id` | INTEGER FK → `secrets(id)` ON DELETE CASCADE | |
-| `value_enc` | BLOB | Previous ciphertext (same AEAD scheme, same associated data as the live row) |
-| `value_hash` | BLOB | Keyed HMAC of the previous plaintext |
-| `changed_at` | INTEGER | Unix timestamp of when the value was replaced |
-
-**Index:** `secret_id`
+Earlier versions retained previous encrypted values on every `UpdateValue`. The
+value-history feature was removed by product decision; migration `0006` drops the
+table and purges any retained previous values on upgrade. `UpdateValue` now
+overwrites in place and keeps no superseded copies.
 
 ---
 

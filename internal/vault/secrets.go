@@ -195,12 +195,10 @@ func (v *Vault) UpdateValue(alias string, newValue []byte) error {
 		id          int64
 		providerKey string
 		env         string
-		oldEnc      []byte
-		oldHash     []byte
 	)
 	row := v.db.SQL().QueryRow(
-		`SELECT s.id, p.key, s.environment, s.value_enc, s.value_hash FROM secrets s JOIN providers p ON p.id=s.provider_id WHERE s.alias=?`, alias)
-	if err := row.Scan(&id, &providerKey, &env, &oldEnc, &oldHash); err == sql.ErrNoRows {
+		`SELECT s.id, p.key, s.environment FROM secrets s JOIN providers p ON p.id=s.provider_id WHERE s.alias=?`, alias)
+	if err := row.Scan(&id, &providerKey, &env); err == sql.ErrNoRows {
 		return ErrNotFound
 	} else if err != nil {
 		return err
@@ -219,11 +217,6 @@ func (v *Vault) UpdateValue(alias string, newValue []byte) error {
 		return err
 	}
 	defer tx.Rollback()
-	// Retain the previous (still-encrypted) value so it can be viewed/restored later.
-	if _, err := tx.Exec(`INSERT INTO secret_history(secret_id,value_enc,value_hash,changed_at) VALUES(?,?,?,?)`,
-		id, oldEnc, oldHash, ts); err != nil {
-		return fmt.Errorf("vault: record history: %w", err)
-	}
 	if _, err := tx.Exec(`UPDATE secrets SET value_enc=?, value_hash=?, updated_at=? WHERE id=?`,
 		blob, valueHash, ts, id); err != nil {
 		return err

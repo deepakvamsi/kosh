@@ -5,7 +5,6 @@ import { Plus, Search, Eye, EyeOff, Copy, Trash2, Archive, RotateCcw, KeyRound, 
 import CustomFieldsPanel from '../components/CustomFieldsPanel'
 import StrengthBar from '../components/StrengthBar'
 import TOTPPanel from '../components/TOTPPanel'
-import HistoryPanel from '../components/HistoryPanel'
 
 type RevealState = { alias: string; item: RevealedItem; timer: ReturnType<typeof setTimeout> | null }
 type AddMode = 'single' | 'keypair'
@@ -244,7 +243,6 @@ export default function SecretsView() {
                       <td colSpan={6} className="px-4 py-2">
                         <RevealedFields item={revealed.item} onCopy={copyValue} copied={copied} />
                         <TOTPPanel alias={s.alias} hasTOTP={s.hasTOTP} onChanged={load} />
-                        <HistoryPanel alias={s.alias} />
                         <CustomFieldsPanel
                           alias={s.alias}
                           initialJson={s.customFields}
