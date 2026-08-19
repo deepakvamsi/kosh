@@ -34,14 +34,20 @@ export default function SecretsView() {
   const [revealed, setRevealed] = useState<RevealState | null>(null)
   const [addMode, setAddMode] = useState<AddMode | null>(null)
   const [copied, setCopied] = useState('')
+  const [loadErr, setLoadErr] = useState('')
 
   const load = useCallback(async () => {
-    const [s, p] = await Promise.all([
-      api.listSecrets(search, filterProv, filterEnv, includeArchived),
-      api.listProviders(),
-    ])
-    setSecrets(s ?? [])
-    setProviders(p ?? [])
+    setLoadErr('')
+    try {
+      const [s, p] = await Promise.all([
+        api.listSecrets(search, filterProv, filterEnv, includeArchived),
+        api.listProviders(),
+      ])
+      setSecrets(s ?? [])
+      setProviders(p ?? [])
+    } catch (e: any) {
+      setLoadErr(String(e?.message ?? e))
+    }
   }, [search, filterProv, filterEnv, includeArchived])
 
   useEffect(() => { load() }, [load])
@@ -141,7 +147,16 @@ export default function SecretsView() {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {secrets.length === 0 ? (
+        {loadErr && (
+          <div className="m-4 flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+            <span className="font-medium">Failed to load secrets:</span>
+            <span className="font-mono text-xs">{loadErr}</span>
+            <button onClick={load} className="ml-auto rounded border border-red-500/30 px-2 py-1 text-xs hover:bg-red-500/20">
+              Retry
+            </button>
+          </div>
+        )}
+        {!loadErr && secrets.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-4 text-sm text-[rgb(var(--text-muted))]">
             <KeyRound className="h-10 w-10 opacity-20" />
             <p className="font-medium text-[rgb(var(--text))]">Your vault is empty</p>
@@ -151,6 +166,7 @@ export default function SecretsView() {
             </button>
           </div>
         ) : (
+          !loadErr && (
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-[rgb(var(--surface))] text-xs text-[rgb(var(--text-muted))] uppercase tracking-wider">
               <tr>
@@ -241,6 +257,7 @@ export default function SecretsView() {
               )})}
             </tbody>
           </table>
+          )
         )}
       </div>
 

@@ -229,9 +229,9 @@ type SecretSummaryDTO struct {
 	CustomFields string   `json:"customFields"`
 }
 
-func (a *App) ListSecrets(search, provider, env string, includeArchived bool) ([]SecretSummaryDTO, error) {
+func (a *App) ListSecrets(search, provider, env string, includeArchived bool) []SecretSummaryDTO {
 	if a.vault == nil {
-		return nil, errVaultUnavailable
+		return nil
 	}
 	summaries, err := a.vault.ListNames(lv_vault.ListFilter{
 		Search:          search,
@@ -240,7 +240,7 @@ func (a *App) ListSecrets(search, provider, env string, includeArchived bool) ([
 		IncludeArchived: includeArchived,
 	})
 	if err != nil {
-		return nil, err
+		return nil
 	}
 	out := make([]SecretSummaryDTO, len(summaries))
 	for i, s := range summaries {
@@ -252,7 +252,7 @@ func (a *App) ListSecrets(search, provider, env string, includeArchived bool) ([
 			IsFavorite: s.IsFavorite, HasTOTP: s.HasTOTP, CustomFields: s.CustomFields,
 		}
 	}
-	return out, nil
+	return out
 }
 
 func (a *App) RevealSecret(alias string) (string, error) {
