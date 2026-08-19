@@ -15,7 +15,7 @@ export default function StrengthBar({ value }: { value: string }) {
             style={{ backgroundColor: i <= s.score ? COLORS[s.score] : 'rgb(var(--border))' }} />
         ))}
       </div>
-      <span className="w-20 shrink-0 text-right text-[10px] font-medium" style={{ color: COLORS[s.score] }}>
+      <span className="w-20 shrink-0 text-right text-[11px] font-medium" style={{ color: COLORS[s.score] }}>
         {s.label}
       </span>
     </div>

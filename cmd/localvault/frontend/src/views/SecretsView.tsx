@@ -315,7 +315,7 @@ function RevealedFields({ item, onCopy, copied }: {
         </div>
       )}
       {item.itemType === 'api_key' && fieldRow('Value', item.value, 'reveal-val')}
-      <span className="text-[10px] text-[rgb(var(--text-muted))]">Auto-hides in 30s · clipboard clears in 30s</span>
+      <span className="text-[11px] text-[rgb(var(--text-muted))]">Auto-hides in 30s · clipboard clears in 30s</span>
     </div>
   )
 }
