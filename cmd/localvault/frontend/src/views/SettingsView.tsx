@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { applyTheme } from '../lib/theme'
 import { Settings, FolderOpen, AlertTriangle, RotateCcw, KeyRound } from 'lucide-react'
 
 const SETTINGS = [
@@ -86,7 +87,12 @@ export default function SettingsView({ onResetDone }: { onResetDone?: () => void
             {s.key === 'theme' ? (
               <select
                 value={values[s.key] ?? s.default}
-                onChange={e => setValues(v => ({ ...v, [s.key]: e.target.value }))}
+                onChange={e => {
+                  const val = e.target.value
+                  setValues(v => ({ ...v, [s.key]: val }))
+                  applyTheme(val)              // switch instantly
+                  api.setSetting('theme', val) // and persist right away
+                }}
                 className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 py-2 text-sm text-[rgb(var(--text))] outline-none"
               >
                 <option value="dark">Dark</option>

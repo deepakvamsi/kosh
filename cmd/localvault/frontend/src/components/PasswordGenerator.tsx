@@ -78,7 +78,7 @@ export default function PasswordGenerator() {
       <button
         onClick={() => setOpen(o => !o)}
         title="Password generator"
-        className="flex h-full items-center gap-1.5 px-3 text-xs text-[rgb(var(--text-muted))] hover:bg-white/10 hover:text-[rgb(var(--text))]"
+        className="my-1 mr-1 flex items-center gap-1.5 rounded-md bg-[rgb(var(--accent)/0.15)] px-3 py-1 text-xs font-semibold text-[rgb(var(--accent))] hover:bg-[rgb(var(--accent)/0.25)]"
       >
         <KeyRound className="h-3.5 w-3.5" /> Generate
       </button>

@@ -1,17 +1,32 @@
 @import "tailwindcss";
 
 @layer base {
+  /* Dark theme (default). --text-muted lightened for readability on the near-black bg. */
   :root {
     --bg: 10 10 15;
-    --surface: 18 18 26;
-    --border: 40 40 55;
-    --text: 228 228 235;
-    --text-muted: 120 120 140;
-    --accent: 99 102 241;
-    --accent-hover: 79 82 221;
-    --danger: 239 68 68;
-    --warn: 234 179 8;
-    --success: 34 197 94;
+    --surface: 20 20 30;
+    --border: 48 48 64;
+    --text: 233 233 240;
+    --text-muted: 162 166 186;
+    --accent: 129 132 248;
+    --accent-hover: 109 112 238;
+    --danger: 248 113 113;
+    --warn: 250 204 21;
+    --success: 74 222 128;
+  }
+
+  /* Light theme — applied when <html data-theme="light">. */
+  :root[data-theme="light"] {
+    --bg: 247 248 251;
+    --surface: 255 255 255;
+    --border: 210 215 226;
+    --text: 22 25 33;
+    --text-muted: 82 89 105;
+    --accent: 79 70 229;
+    --accent-hover: 67 56 202;
+    --danger: 220 38 38;
+    --warn: 180 120 4;
+    --success: 22 163 74;
   }
 
   * { box-sizing: border-box; }
@@ -19,8 +34,9 @@
   body {
     background-color: rgb(var(--bg));
     color: rgb(var(--text));
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: system-ui, 'Segoe UI', 'Inter', sans-serif;
     font-size: 14px;
+    font-weight: 450;
     -webkit-user-select: none;
     user-select: none;
     overflow: hidden;

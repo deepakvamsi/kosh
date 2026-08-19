@@ -12,6 +12,7 @@ import BackupsView from './views/BackupsView'
 import SettingsView from './views/SettingsView'
 import ImportView from './views/ImportView'
 import { api } from './api'
+import { applyTheme } from './lib/theme'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 
 const DEFAULT_AUTOLOCK_SECS = 300
@@ -25,6 +26,9 @@ export default function App() {
   const timerRef     = useRef<ReturnType<typeof setTimeout> | null>(null)
   const autolockSecs = useRef(DEFAULT_AUTOLOCK_SECS)
   const lastTouch    = useRef(0)
+
+  // Apply the saved theme as early as possible (before unlock, so the lock screen matches).
+  useEffect(() => { api.getSetting('theme').then(applyTheme).catch(() => {}) }, [])
 
   // UI-only transition to the lock screen. Used when the backend reports it locked the
   // vault (idle auto-lock or a backup restore); the DEK is already gone server-side.
