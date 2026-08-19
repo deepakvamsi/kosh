@@ -23,6 +23,7 @@ Migrations live in `internal/storage/migrations/` as ordered `NNNN_name.sql` fil
 | 4 | `0004_totp_favorites_history.sql` | `secrets.is_favorite`, `secrets.totp_enc`, `secret_history` table |
 | 5 | `0005_schema_solidify.sql` | Idempotent guards — re-adds all 0002–0004 columns if missing |
 | 6 | `0006_drop_secret_history.sql` | Removes the `secret_history` table — value-history feature dropped; purges retained previous values on upgrade |
+| 7 | `0007_keypair_item_type.sql` | Rebuilds `secrets` to widen the `item_type` CHECK to include `keypair` (access-key/secret-key pair as one entry); FK-safe, ciphertext copied verbatim |
 
 ---
 
@@ -90,7 +91,7 @@ Every row holds one vault item. **`value_enc` is always ciphertext. No row ever 
 |--------|------|-------------|
 | `id` | INTEGER PK AUTOINCREMENT | Used as associated data in AEAD — ciphertext is bound to this row |
 | `alias` | TEXT UNIQUE | Human name, e.g. `OPENAI_PROD` |
-| `item_type` | TEXT DEFAULT `'api_key'` | `api_key` / `login` / `secure_note` |
+| `item_type` | TEXT DEFAULT `'api_key'` | `api_key` / `login` / `secure_note` / `keypair` (value_enc = JSON `{accessKey,secretKey}`) |
 | `provider_id` | INTEGER FK → `providers(id)` | |
 | `environment` | TEXT CHECK (`dev`/`qa`/`staging`/`prod`) | |
 | `folder_id` | INTEGER FK → `folders(id)` ON DELETE SET NULL | Nullable |

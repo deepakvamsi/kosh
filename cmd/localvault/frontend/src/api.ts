@@ -1,4 +1,4 @@
-import { BoolResult, IDResult, SecretSummary, RevealedItem, HealthItem, AuditEntry, Provider, AddSecretInput, AddKeyPairInput, ImportPreviewResult, ImportCommitResult, AddProviderInput } from './types'
+import { BoolResult, IDResult, SecretSummary, RevealedItem, HealthItem, AuditEntry, Provider, AddSecretInput, ImportPreviewResult, ImportCommitResult, AddProviderInput } from './types'
 
 declare global {
   interface Window {
@@ -41,7 +41,6 @@ declare global {
           GetVaultPath(): Promise<string>
           GetVersion(): Promise<string>
           ResetVault(): Promise<BoolResult>
-          AddKeyPair(input: AddKeyPairInput): Promise<{ accessKeyId: number; secretKeyId: number; err?: string }>
           ImportPreview(filePath: string, cm: import('./types').ColMapDTO): Promise<ImportPreviewResult>
           ImportCommit(filePath: string, cm: import('./types').ColMapDTO): Promise<ImportCommitResult>
         }
@@ -98,7 +97,6 @@ export const api = {
   getVersion:    ()                          => go().GetVersion(),
   resetVault:    ()                          => go().ResetVault(),
 
-  addKeyPair:    (input: AddKeyPairInput)    => go().AddKeyPair(input),
 
   importPreview: (path: string, cm: import('./types').ColMapDTO) => go().ImportPreview(path, cm),
   importCommit:  (path: string, cm: import('./types').ColMapDTO) => go().ImportCommit(path, cm),

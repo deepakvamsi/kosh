@@ -17,6 +17,15 @@ type loginPayload struct {
 	Password string `json:"password"`
 }
 
+// keypairPayload is the canonical plaintext shape stored (encrypted) in value_enc for
+// ItemKeyPair entries — an access-key / secret-key pair (e.g. AWS IAM credentials).
+// Both halves are marshaled to JSON and encrypted together as one value, so a key pair
+// is a single vault entry (one row, one audit trail) rather than two linked secrets.
+type keypairPayload struct {
+	AccessKey string `json:"accessKey"`
+	SecretKey string `json:"secretKey"`
+}
+
 // encodeItemPayload produces the plaintext bytes to encrypt for a given input, enforcing
 // type-aware validation in the core (not the UI). For ItemAPIKey it returns in.Value
 // directly (backward compatible with pre-item-type vaults); other types are encoded so
@@ -48,6 +57,19 @@ func encodeItemPayload(in AddSecretInput) ([]byte, error) {
 		}
 		return []byte(in.Note), nil
 
+	case ItemKeyPair:
+		if strings.TrimSpace(in.AccessKey) == "" {
+			return nil, fmt.Errorf("vault: keypair requires an access key")
+		}
+		if in.SecretKey == "" {
+			return nil, fmt.Errorf("vault: keypair requires a secret key")
+		}
+		b, err := json.Marshal(keypairPayload{AccessKey: in.AccessKey, SecretKey: in.SecretKey})
+		if err != nil {
+			return nil, fmt.Errorf("vault: encode keypair: %w", err)
+		}
+		return b, nil
+
 	default:
 		return nil, fmt.Errorf("vault: invalid item type %q", in.ItemType)
 	}
@@ -57,11 +79,13 @@ func encodeItemPayload(in AddSecretInput) ([]byte, error) {
 // relevant to ItemType are populated. Callers should treat every string field as
 // sensitive and drop references as soon as possible.
 type RevealedItem struct {
-	ItemType ItemType
-	Value    string // ItemAPIKey: the raw key/token
-	Username string // ItemLogin
-	Password string // ItemLogin
-	Note     string // ItemSecureNote
+	ItemType  ItemType
+	Value     string // ItemAPIKey: the raw key/token
+	Username  string // ItemLogin
+	Password  string // ItemLogin
+	Note      string // ItemSecureNote
+	AccessKey string // ItemKeyPair
+	SecretKey string // ItemKeyPair
 }
 
 // RevealItem decrypts an entry and returns it decoded per its stored item type, recording
@@ -86,6 +110,15 @@ func (v *Vault) RevealItem(alias string) (RevealedItem, error) {
 		}
 		out.Username = lp.Username
 		out.Password = lp.Password
+	case ItemKeyPair:
+		var kp keypairPayload
+		if err := json.Unmarshal(pt, &kp); err != nil {
+			// Defensive fallback: never lose the user's data on a decode mismatch.
+			out.Value = string(pt)
+			return out, nil
+		}
+		out.AccessKey = kp.AccessKey
+		out.SecretKey = kp.SecretKey
 	case ItemSecureNote:
 		out.Note = string(pt)
 	default:

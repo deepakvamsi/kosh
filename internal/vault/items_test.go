@@ -65,6 +65,58 @@ func TestLoginSecretsNeverStoredInPlaintextColumns(t *testing.T) {
 	}
 }
 
+func TestAddKeyPairAndRevealItem(t *testing.T) {
+	v := newInitedVault(t)
+	const ak = "AKIAIOSFODNN7EXAMPLE"
+	const sk = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+	if _, err := v.AddSecret(AddSecretInput{
+		Alias: "AWS_BEDROCK_PROD", ItemType: ItemKeyPair, ProviderKey: "aws", Environment: Prod,
+		AccessKey: ak, SecretKey: sk,
+	}); err != nil {
+		t.Fatalf("AddSecret keypair: %v", err)
+	}
+	r, err := v.RevealItem("AWS_BEDROCK_PROD")
+	if err != nil {
+		t.Fatalf("RevealItem: %v", err)
+	}
+	if r.ItemType != ItemKeyPair {
+		t.Errorf("item type = %q, want keypair", r.ItemType)
+	}
+	if r.AccessKey != ak || r.SecretKey != sk {
+		t.Errorf("keypair round trip: got (%q, %q)", r.AccessKey, r.SecretKey)
+	}
+}
+
+// TestKeyPairSecretsNeverStoredInPlaintextColumns mirrors the login guarantee: both the
+// access key and the secret key live ONLY inside the encrypted value_enc blob.
+func TestKeyPairSecretsNeverStoredInPlaintextColumns(t *testing.T) {
+	v := newInitedVault(t)
+	const ak = "AKIAIOSFODNN7EXAMPLE"
+	const sk = "wJalrXUtnFEMI-secret-material"
+	if _, err := v.AddSecret(AddSecretInput{
+		Alias: "kp", ItemType: ItemKeyPair, ProviderKey: "aws", Environment: Prod,
+		Description: "aws creds", AccessKey: ak, SecretKey: sk,
+	}); err != nil {
+		t.Fatalf("AddSecret: %v", err)
+	}
+	var itemType, desc string
+	var valueEnc []byte
+	row := v.db.SQL().QueryRow(
+		`SELECT item_type,COALESCE(description,''),value_enc FROM secrets WHERE alias='kp'`)
+	if err := row.Scan(&itemType, &desc, &valueEnc); err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if itemType != "keypair" {
+		t.Errorf("item_type = %q, want keypair", itemType)
+	}
+	if strings.Contains(desc, ak) || strings.Contains(desc, sk) {
+		t.Errorf("description leaked key material: %q", desc)
+	}
+	if strings.Contains(string(valueEnc), ak) || strings.Contains(string(valueEnc), sk) {
+		t.Error("value_enc must be ciphertext but contains plaintext key material")
+	}
+}
+
 func TestSecureNoteRoundTrip(t *testing.T) {
 	v := newInitedVault(t)
 	const body = "recovery phrase: correct horse battery staple"
@@ -118,6 +170,8 @@ func TestItemValidation(t *testing.T) {
 		{"note missing body", AddSecretInput{Alias: "c", ItemType: ItemSecureNote, ProviderKey: "custom", Environment: Dev}},
 		{"api_key missing value", AddSecretInput{Alias: "d", ItemType: ItemAPIKey, ProviderKey: "openai", Environment: Dev}},
 		{"unknown item type", AddSecretInput{Alias: "e", ItemType: "totp", ProviderKey: "openai", Environment: Dev, Value: []byte("x")}},
+		{"keypair missing secret", AddSecretInput{Alias: "f", ItemType: ItemKeyPair, ProviderKey: "aws", Environment: Dev, AccessKey: "AKIA"}},
+		{"keypair missing access", AddSecretInput{Alias: "g", ItemType: ItemKeyPair, ProviderKey: "aws", Environment: Dev, SecretKey: "s"}},
 	}
 	for _, tc := range cases {
 		if _, err := v.AddSecret(tc.in); err == nil {

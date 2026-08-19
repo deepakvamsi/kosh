@@ -276,14 +276,16 @@ func (a *App) RevealSecret(alias string) (string, error) {
 
 type AddSecretInput struct {
 	Alias        string `json:"alias"`
-	ItemType     string `json:"itemType"` // "api_key" (default) | "login" | "secure_note"
+	ItemType     string `json:"itemType"` // "api_key" (default) | "login" | "secure_note" | "keypair"
 	ProviderKey  string `json:"providerKey"`
 	Environment  string `json:"environment"`
 	Description  string `json:"description"`
-	Value        string `json:"value"`    // api_key
-	Username     string `json:"username"` // login
-	Password     string `json:"password"` // login
-	Note         string `json:"note"`     // secure_note
+	Value        string `json:"value"`     // api_key
+	Username     string `json:"username"`  // login
+	Password     string `json:"password"`  // login
+	Note         string `json:"note"`      // secure_note
+	AccessKey    string `json:"accessKey"` // keypair
+	SecretKey    string `json:"secretKey"` // keypair
 	ExpiresAt    *int64 `json:"expiresAt"`
 	RotationDays *int   `json:"rotationDays"`
 }
@@ -302,6 +304,8 @@ func (a *App) AddSecret(in AddSecretInput) IDResult {
 		Username:     in.Username,
 		Password:     in.Password,
 		Note:         in.Note,
+		AccessKey:    in.AccessKey,
+		SecretKey:    in.SecretKey,
 		ExpiresAt:    in.ExpiresAt,
 		RotationDays: in.RotationDays,
 	})
@@ -314,12 +318,14 @@ func (a *App) AddSecret(in AddSecretInput) IDResult {
 // RevealedItemDTO is the decoded, type-aware reveal returned to the UI. Only the fields
 // relevant to ItemType are populated.
 type RevealedItemDTO struct {
-	ItemType string `json:"itemType"`
-	Value    string `json:"value"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Note     string `json:"note"`
-	Err      string `json:"err,omitempty"`
+	ItemType  string `json:"itemType"`
+	Value     string `json:"value"`
+	Username  string `json:"username"`
+	Password  string `json:"password"`
+	Note      string `json:"note"`
+	AccessKey string `json:"accessKey"`
+	SecretKey string `json:"secretKey"`
+	Err       string `json:"err,omitempty"`
 }
 
 // RevealItem decrypts an entry and returns it decoded per its stored type (api_key /
@@ -334,11 +340,13 @@ func (a *App) RevealItem(alias string) RevealedItemDTO {
 		return RevealedItemDTO{Err: err.Error()}
 	}
 	return RevealedItemDTO{
-		ItemType: string(r.ItemType),
-		Value:    r.Value,
-		Username: r.Username,
-		Password: r.Password,
-		Note:     r.Note,
+		ItemType:  string(r.ItemType),
+		Value:     r.Value,
+		Username:  r.Username,
+		Password:  r.Password,
+		Note:      r.Note,
+		AccessKey: r.AccessKey,
+		SecretKey: r.SecretKey,
 	}
 }
 
@@ -615,58 +623,9 @@ func (a *App) GetVaultPath() string { return a.dbPath }
 
 func (a *App) GetCurrentTime() int64 { return time.Now().Unix() }
 
-type AddKeyPairInput struct {
-	AccessKeyAlias string `json:"accessKeyAlias"`
-	AccessKeyValue string `json:"accessKeyValue"`
-	SecretKeyAlias string `json:"secretKeyAlias"`
-	SecretKeyValue string `json:"secretKeyValue"`
-	ProviderKey    string `json:"providerKey"`
-	Environment    string `json:"environment"`
-	Description    string `json:"description"`
-	ExpiresAt      *int64 `json:"expiresAt"`
-}
-
-type AddKeyPairResult struct {
-	AccessKeyID int64  `json:"accessKeyId"`
-	SecretKeyID int64  `json:"secretKeyId"`
-	Err         string `json:"err,omitempty"`
-}
-
-func (a *App) AddKeyPair(in AddKeyPairInput) AddKeyPairResult {
-	if a.vault == nil {
-		return AddKeyPairResult{Err: errVaultUnavailable.Error()}
-	}
-	if !a.vault.Unlocked() {
-		return AddKeyPairResult{Err: lv_vault.ErrLocked.Error()}
-	}
-
-	akID, err := a.vault.AddSecret(lv_vault.AddSecretInput{
-		Alias:       in.AccessKeyAlias,
-		ProviderKey: in.ProviderKey,
-		Environment: lv_vault.Environment(in.Environment),
-		Description: in.Description,
-		Value:       []byte(in.AccessKeyValue),
-		ExpiresAt:   in.ExpiresAt,
-	})
-	if err != nil {
-		return AddKeyPairResult{Err: "access key: " + err.Error()}
-	}
-
-	skID, err := a.vault.AddSecret(lv_vault.AddSecretInput{
-		Alias:       in.SecretKeyAlias,
-		ProviderKey: in.ProviderKey,
-		Environment: lv_vault.Environment(in.Environment),
-		Description: in.Description,
-		Value:       []byte(in.SecretKeyValue),
-		ExpiresAt:   in.ExpiresAt,
-	})
-	if err != nil {
-		_ = a.vault.DeleteSecret(in.AccessKeyAlias)
-		return AddKeyPairResult{Err: "secret key: " + err.Error()}
-	}
-
-	return AddKeyPairResult{AccessKeyID: akID, SecretKeyID: skID}
-}
+// Key pairs are stored as a first-class item type ("keypair") via AddSecret with
+// AccessKey/SecretKey — one encrypted entry, one row, one audit trail. The old
+// AddKeyPair endpoint that created two linked secrets has been removed.
 
 type ImportRowDTO struct {
 	SourceRow   int    `json:"sourceRow"`
