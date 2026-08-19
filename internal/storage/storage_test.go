@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"database/sql"
 	"fmt"
 	"testing"
 )
@@ -54,8 +55,8 @@ func TestMigrationsRecorded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SchemaVersion: %v", err)
 	}
-	if v < 5 {
-		t.Fatalf("expected schema version >=5 (all migrations applied), got %d", v)
+	if v < 6 {
+		t.Fatalf("expected schema version >=6 (all migrations applied), got %d", v)
 	}
 }
 
@@ -82,9 +83,12 @@ func TestAllColumnsExist(t *testing.T) {
 		}
 	}
 
-	var hist int
-	if err := db.SQL().QueryRow(`SELECT count(*) FROM secret_history`).Scan(&hist); err != nil {
-		t.Errorf("secret_history table missing: %v", err)
+	// secret_history was removed in migration 0006 — the table must not exist.
+	var name string
+	err = db.SQL().QueryRow(
+		`SELECT name FROM sqlite_master WHERE type='table' AND name='secret_history'`).Scan(&name)
+	if err != sql.ErrNoRows {
+		t.Errorf("secret_history table should be dropped by 0006; got name=%q err=%v", name, err)
 	}
 }
 
@@ -104,7 +108,7 @@ func TestMigrationIdempotent(t *testing.T) {
 	}
 
 	v, _ := SchemaVersion(db.SQL())
-	if v < 5 {
-		t.Fatalf("schema version should still be >=5 after re-runs, got %d", v)
+	if v < 6 {
+		t.Fatalf("schema version should still be >=6 after re-runs, got %d", v)
 	}
 }

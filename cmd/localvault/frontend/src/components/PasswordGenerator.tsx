@@ -80,7 +80,7 @@ export default function PasswordGenerator() {
         title="Password generator"
         className="my-1 mr-1 flex items-center gap-1.5 rounded-md bg-[rgb(var(--accent)/0.15)] px-3 py-1 text-xs font-semibold text-[rgb(var(--accent))] hover:bg-[rgb(var(--accent)/0.25)]"
       >
-        <KeyRound className="h-3.5 w-3.5" /> Generate
+        <KeyRound className="h-3.5 w-3.5" /> Generate Password
       </button>
 
       {open && (

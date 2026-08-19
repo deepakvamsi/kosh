@@ -26,8 +26,6 @@ declare global {
           SetFavorite(alias: string, fav: boolean): Promise<BoolResult>
           SetTOTP(alias: string, seed: string): Promise<BoolResult>
           GetTOTPCode(alias: string): Promise<{ code: string; remaining: number; err?: string }>
-          ListHistory(alias: string): Promise<{ id: number; changedAt: number }[]>
-          RevealHistoryValue(alias: string, historyID: number): Promise<string>
           GetCustomFields(alias: string): Promise<string>
           SetCustomFields(alias: string, jsonFields: string): Promise<BoolResult>
           GetHealth(): Promise<HealthItem[]>
@@ -80,9 +78,6 @@ export const api = {
 
   setTOTP:       (alias: string, seed: string) => go().SetTOTP(alias, seed),
   getTOTPCode:   (alias: string)               => go().GetTOTPCode(alias),
-
-  listHistory:         (alias: string)                          => go().ListHistory(alias),
-  revealHistoryValue:  (alias: string, historyID: number)       => go().RevealHistoryValue(alias, historyID),
 
   getCustomFields: (alias: string)                     => go().GetCustomFields(alias),
   setCustomFields: (alias: string, json: string)       => go().SetCustomFields(alias, json),

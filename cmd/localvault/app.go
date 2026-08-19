@@ -401,33 +401,6 @@ func (a *App) GetTOTPCode(alias string) TOTPResult {
 	return TOTPResult{Code: code, Remaining: rem}
 }
 
-type HistoryEntryDTO struct {
-	ID        int64 `json:"id"`
-	ChangedAt int64 `json:"changedAt"`
-}
-
-func (a *App) ListHistory(alias string) ([]HistoryEntryDTO, error) {
-	if a.vault == nil {
-		return nil, errVaultUnavailable
-	}
-	entries, err := a.vault.ListHistory(alias)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]HistoryEntryDTO, len(entries))
-	for i, e := range entries {
-		out[i] = HistoryEntryDTO{ID: e.ID, ChangedAt: e.ChangedAt}
-	}
-	return out, nil
-}
-
-func (a *App) RevealHistoryValue(alias string, historyID int64) (string, error) {
-	if a.vault == nil {
-		return "", errVaultUnavailable
-	}
-	return a.vault.RevealHistoryValue(alias, historyID)
-}
-
 func (a *App) GetCustomFields(alias string) (string, error) {
 	if a.vault == nil {
 		return "", errVaultUnavailable
