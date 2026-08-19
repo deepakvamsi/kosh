@@ -62,7 +62,7 @@ export default function TOTPPanel({ alias, hasTOTP, onChanged }: TOTPPanelProps)
         <Shield className="h-3 w-3" />
         2FA / TOTP
         {hasTOTP && (
-          <span className="rounded bg-green-500/15 px-1.5 py-0.5 text-[10px] text-green-400">active</span>
+          <span className="rounded bg-green-500/15 px-1.5 py-0.5 text-[11px] text-green-400">active</span>
         )}
         <span className="ml-auto text-[rgb(var(--text-muted))]">{open ? '▲' : '▼'}</span>
       </button>
@@ -82,7 +82,7 @@ export default function TOTPPanel({ alias, hasTOTP, onChanged }: TOTPPanelProps)
                       style={{ width: `${pct}%` }}
                     />
                   </div>
-                  <span className="text-[10px] text-[rgb(var(--text-muted))]">{remaining}s remaining</span>
+                  <span className="text-[11px] text-[rgb(var(--text-muted))]">{remaining}s remaining</span>
                 </div>
                 <button onClick={removeSeed} title="Remove TOTP seed"
                   className="text-[rgb(var(--text-muted))] hover:text-[rgb(var(--danger))]">

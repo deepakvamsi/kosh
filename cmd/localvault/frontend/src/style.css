@@ -31,12 +31,18 @@
 
   * { box-sizing: border-box; }
 
+  /* Root scale — Tailwind's rem-based type + spacing all key off this. Nudged up
+     from the 16px default so every text-xs/sm/base and every p-/gap- grows
+     proportionally: a bigger, more comfortable UI without touching each class. */
+  :root { font-size: 17px; }
+
   body {
     background-color: rgb(var(--bg));
     color: rgb(var(--text));
     font-family: system-ui, 'Segoe UI', 'Inter', sans-serif;
-    font-size: 14px;
+    font-size: 0.9375rem; /* ~16px at the 17px root — readable default for unclassed text */
     font-weight: 450;
+    line-height: 1.5;
     -webkit-user-select: none;
     user-select: none;
     overflow: hidden;

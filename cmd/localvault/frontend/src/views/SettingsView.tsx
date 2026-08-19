@@ -83,7 +83,7 @@ export default function SettingsView({ onResetDone }: { onResetDone?: () => void
       <div className="flex flex-col gap-4">
         {SETTINGS.map(s => (
           <label key={s.key} className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
-            {s.label} {s.unit && <span className="text-[10px]">({s.unit})</span>}
+            {s.label} {s.unit && <span className="text-[11px]">({s.unit})</span>}
             {s.key === 'theme' ? (
               <select
                 value={values[s.key] ?? s.default}

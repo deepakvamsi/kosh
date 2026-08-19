@@ -116,8 +116,8 @@ export default function PasswordGenerator() {
                 {saving ? '…' : 'Save'}
               </button>
             </div>
-            {saveMsg && <p className="mt-1.5 text-[10px] text-[rgb(var(--text-muted))]">{saveMsg}</p>}
-            <p className="mt-1.5 text-[10px] text-[rgb(var(--text-muted))]">Optional — copy it, or store it as a secret. Your choice.</p>
+            {saveMsg && <p className="mt-1.5 text-[11px] text-[rgb(var(--text-muted))]">{saveMsg}</p>}
+            <p className="mt-1.5 text-[11px] text-[rgb(var(--text-muted))]">Optional — copy it, or store it as a secret. Your choice.</p>
           </div>
 
           <button onClick={() => setOpen(false)} className="absolute right-2 top-2 rounded p-1 text-[rgb(var(--text-muted))] hover:text-[rgb(var(--text))]"><X className="h-3.5 w-3.5" /></button>

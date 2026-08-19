@@ -30,7 +30,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           <p className="mt-1 max-w-md text-xs text-[rgb(var(--text-muted))]">
             Your vault is safe — this is only a display error. Details are in the console.
           </p>
-          <p className="mt-2 max-w-md break-words font-mono text-[10px] text-[rgb(var(--text-muted))]">{this.state.error.message}</p>
+          <p className="mt-2 max-w-md break-words font-mono text-[11px] text-[rgb(var(--text-muted))]">{this.state.error.message}</p>
         </div>
         <button onClick={this.reset}
           className="rounded-lg bg-[rgb(var(--accent))] px-4 py-2 text-sm font-medium text-white hover:bg-[rgb(var(--accent-hover))]">
