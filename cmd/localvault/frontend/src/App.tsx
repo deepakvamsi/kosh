@@ -3,6 +3,7 @@ import './style.css'
 import UnlockScreen from './components/UnlockScreen'
 import Sidebar, { View } from './components/Sidebar'
 import TitleBar from './components/TitleBar'
+import ErrorBoundary from './components/ErrorBoundary'
 import DashboardView from './views/DashboardView'
 import SecretsView from './views/SecretsView'
 import ProvidersView from './views/ProvidersView'
@@ -102,13 +103,15 @@ export default function App() {
         <div className="flex flex-1 overflow-hidden">
           <Sidebar current={view} onChange={setView} onLock={handleLock} />
           <main key={lockKey} className="flex-1 overflow-hidden bg-[rgb(var(--bg))]">
-            {view === 'dashboard'  && <DashboardView  onNav={v => setView(v as View)} />}
-            {view === 'secrets'    && <SecretsView />}
-            {view === 'providers'  && <ProvidersView />}
-            {view === 'audit'      && <AuditView />}
-            {view === 'backups'    && <BackupsView />}
-            {view === 'import'     && <ImportView />}
-            {view === 'settings'   && <SettingsView onResetDone={handleReset} />}
+            <ErrorBoundary key={view}>
+              {view === 'dashboard'  && <DashboardView  onNav={v => setView(v as View)} />}
+              {view === 'secrets'    && <SecretsView />}
+              {view === 'providers'  && <ProvidersView />}
+              {view === 'audit'      && <AuditView />}
+              {view === 'backups'    && <BackupsView />}
+              {view === 'import'     && <ImportView />}
+              {view === 'settings'   && <SettingsView onResetDone={handleReset} />}
+            </ErrorBoundary>
           </main>
         </div>
       )}

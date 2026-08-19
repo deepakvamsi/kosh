@@ -244,10 +244,14 @@ func (a *App) ListSecrets(search, provider, env string, includeArchived bool) []
 	}
 	out := make([]SecretSummaryDTO, len(summaries))
 	for i, s := range summaries {
+		tags := s.Tags
+		if tags == nil {
+			tags = []string{} // never emit JSON null — the UI maps over this
+		}
 		out[i] = SecretSummaryDTO{
 			ID: s.ID, Alias: s.Alias, ItemType: string(s.ItemType), ProviderKey: s.ProviderKey,
 			ProviderName: s.ProviderName, Environment: string(s.Environment),
-			Tags: s.Tags, FolderName: s.FolderName, Description: s.Description,
+			Tags: tags, FolderName: s.FolderName, Description: s.Description,
 			ExpiresAt: s.ExpiresAt, LastUsedAt: s.LastUsedAt, IsArchived: s.IsArchived,
 			IsFavorite: s.IsFavorite, HasTOTP: s.HasTOTP, CustomFields: s.CustomFields,
 		}
