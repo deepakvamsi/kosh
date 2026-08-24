@@ -32,7 +32,7 @@ jobs:
       WINDOWS_PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
       WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with: { go-version: '1.25' }
       - uses: actions/setup-node@v4
@@ -116,7 +116,7 @@ jobs:
     # use libwebkit2gtk-4.1-dev and add `-tags webkit2_41` to the wails build.
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with: { go-version: '1.25' }
       - uses: actions/setup-node@v4
