@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { applyTheme } from '../lib/theme'
-import { Settings, FolderOpen, AlertTriangle, RotateCcw, KeyRound } from 'lucide-react'
+import { Settings, FolderOpen, AlertTriangle, RotateCcw, KeyRound, ShieldCheck } from 'lucide-react'
+import type { KdfParams } from '../types'
 
 const SETTINGS = [
   { key: 'autolock_seconds',        label: 'Auto-lock timeout',    unit: 'seconds', default: '300' },
@@ -20,26 +21,62 @@ export default function SettingsView({ onResetDone }: { onResetDone?: () => void
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null)
   const [genLoading, setGenLoading] = useState(false)
   const [genError, setGenError] = useState('')
+  // A recovery key is a permanent second door into the vault, so the backend requires
+  // the master password again. Collected here rather than via prompt() so it is masked.
+  const [reauthOpen, setReauthOpen] = useState(false)
+  const [reauthPw, setReauthPw] = useState('')
+
+  // Encryption strength. Loaded on demand because the backend runs a real Argon2id
+  // derivation to work out what this machine can sustain.
+  const [kdf, setKdf] = useState<KdfParams | null>(null)
+  const [kdfOpen, setKdfOpen] = useState(false)
+  const [kdfPw, setKdfPw] = useState('')
+  const [kdfBusy, setKdfBusy] = useState(false)
+  const [kdfMsg, setKdfMsg] = useState('')
 
   useEffect(() => {
     api.getVaultPath().then(setVaultPath)
-    api.hasRecoveryKey().then(setHasRecovery)
+    api.hasRecoveryKey().then(r => { if (r.err) setGenError(r.err); else setHasRecovery(r.value) })
     Promise.all(SETTINGS.map(s => api.getSetting(s.key).then(v => [s.key, v || s.default] as const)))
       .then(pairs => setValues(Object.fromEntries(pairs)))
   }, [])
 
-  async function handleGenerateRecovery() {
+  useEffect(() => {
+    api.getKdfParams().then(p => { if (!p.err) setKdf(p); else setKdfMsg(p.err) })
+  }, [])
+
+  async function handleStrengthen() {
+    if (!kdfPw) { setKdfMsg('Enter your master password to continue'); return }
+    setKdfBusy(true); setKdfMsg('')
+    try {
+      const res = await api.strengthenKdf(kdfPw)
+      if (res.err) { setKdfMsg(res.err); return }
+      const fresh = await api.getKdfParams()
+      if (!fresh.err) setKdf(fresh)
+      setKdfOpen(false)
+      setKdfMsg('Encryption strengthened. Your next unlock will take slightly longer.')
+    } catch (e: any) { setKdfMsg(String(e)) }
+    finally { setKdfPw(''); setKdfBusy(false) }
+  }
+
+  function startGenerateRecovery() {
     const warn = hasRecovery
       ? 'This replaces your existing recovery key — the old one will stop working. Continue?'
       : 'Generate a recovery key? Anyone who has it can reset your master password, so store it somewhere safe and offline.'
     if (!confirm(warn)) return
+    setGenError(''); setReauthPw(''); setReauthOpen(true)
+  }
+
+  async function handleGenerateRecovery() {
+    if (!reauthPw) { setGenError('Enter your master password to continue'); return }
     setGenLoading(true); setGenError('')
     try {
-      const code = await api.generateRecoveryKey()
+      const code = await api.generateRecoveryKey(reauthPw)
       setRecoveryCode(code)
       setHasRecovery(true)
+      setReauthOpen(false)
     } catch (e: any) { setGenError(String(e)) }
-    finally { setGenLoading(false) }
+    finally { setReauthPw(''); setGenLoading(false) }
   }
 
   function copyRecovery() {
@@ -129,8 +166,80 @@ export default function SettingsView({ onResetDone }: { onResetDone?: () => void
         <p>• No network connections — air-sealed by design</p>
         <p>• Screenshot-blocked on Windows (WDA_EXCLUDEFROMCAPTURE)</p>
         <p>• Argon2id key derivation, XChaCha20-Poly1305 AEAD</p>
-        <p>• Tamper-evident hash-chained audit log</p>
+        <p>• Tamper-evident audit log — hash-chained and HMAC-authenticated</p>
         <p>• Clipboard auto-clears after reveal/copy</p>
+      </div>
+
+      <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] p-4 flex flex-col gap-3">
+        <p className="flex items-center gap-2 text-xs font-medium text-[rgb(var(--text))]">
+          <ShieldCheck className="h-3.5 w-3.5" /> Encryption strength
+        </p>
+        <p className="text-xs text-[rgb(var(--text-muted))]">
+          If someone copies your vault file, the only thing between them and your secrets
+          is how expensive it is to guess your master password. That cost is set when the
+          vault is created and can be raised later.
+        </p>
+
+        {kdf && (
+          <div className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--bg))] p-3 text-xs text-[rgb(var(--text-muted))] space-y-0.5">
+            <p>Argon2id · {Math.round(kdf.memoryKiB / 1024)} MiB memory · {kdf.time} passes · {kdf.threads} threads</p>
+            {kdf.canStrengthen && (
+              <p className="text-[rgb(var(--warn))]">
+                This machine can sustain {Math.round(kdf.suggestedMemoryKiB / 1024)} MiB · {kdf.suggestedTime} passes.
+              </p>
+            )}
+          </div>
+        )}
+
+        {kdf?.canStrengthen && (kdfOpen ? (
+          <div className="flex flex-col gap-2">
+            <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
+              Confirm your master password
+              <input
+                type="password"
+                autoFocus
+                value={kdfPw}
+                onChange={e => setKdfPw(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleStrengthen() }}
+                placeholder="Master password"
+                className="max-w-xs rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 py-2 text-sm text-[rgb(var(--text))] outline-none focus:border-[rgb(var(--accent))]"
+              />
+            </label>
+            <p className="text-xs text-[rgb(var(--text-muted))]">
+              Your secrets are not re-encrypted and your recovery key keeps working — only
+              the password-to-key step changes.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={handleStrengthen}
+                disabled={kdfBusy}
+                className="w-fit rounded-lg bg-[rgb(var(--accent))] px-4 py-2 text-sm font-medium text-white hover:bg-[rgb(var(--accent-hover))] disabled:opacity-50"
+              >
+                {kdfBusy ? 'Re-keying…' : 'Confirm'}
+              </button>
+              <button
+                onClick={() => { setKdfOpen(false); setKdfPw(''); setKdfMsg('') }}
+                disabled={kdfBusy}
+                className="w-fit rounded-lg border border-[rgb(var(--border))] px-4 py-2 text-sm hover:bg-white/5 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => { setKdfMsg(''); setKdfPw(''); setKdfOpen(true) }}
+            className="flex w-fit items-center gap-2 rounded-lg border border-[rgb(var(--border))] px-4 py-2 text-sm hover:bg-white/5"
+          >
+            <ShieldCheck className="h-4 w-4" /> Strengthen encryption
+          </button>
+        ))}
+
+        {kdfMsg && (
+          <p className={`text-xs ${kdfMsg.startsWith('Encryption strengthened') ? 'text-[rgb(var(--success))]' : 'text-[rgb(var(--danger))]'}`}>
+            {kdfMsg}
+          </p>
+        )}
       </div>
 
       <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] p-4 flex flex-col gap-3">
@@ -167,15 +276,49 @@ export default function SettingsView({ onResetDone }: { onResetDone?: () => void
           </div>
         ) : (
           <div className="flex flex-col gap-1.5">
-            <button
-              onClick={handleGenerateRecovery}
-              disabled={genLoading}
-              className="flex w-fit items-center gap-2 rounded-lg border border-[rgb(var(--border))] px-4 py-2 text-sm hover:bg-white/5 disabled:opacity-50"
-            >
-              <KeyRound className="h-4 w-4" />
-              {genLoading ? 'Generating…' : hasRecovery ? 'Regenerate recovery key' : 'Generate recovery key'}
-            </button>
-            {hasRecovery && <p className="text-xs text-[rgb(var(--success))]">A recovery key is configured.</p>}
+            {reauthOpen ? (
+              <div className="flex flex-col gap-2">
+                <label className="flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]">
+                  Confirm your master password
+                  <input
+                    type="password"
+                    autoFocus
+                    value={reauthPw}
+                    onChange={e => setReauthPw(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleGenerateRecovery() }}
+                    placeholder="Master password"
+                    className="max-w-xs rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 py-2 text-sm text-[rgb(var(--text))] outline-none focus:border-[rgb(var(--accent))]"
+                  />
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleGenerateRecovery}
+                    disabled={genLoading}
+                    className="flex w-fit items-center gap-2 rounded-lg bg-[rgb(var(--accent))] px-4 py-2 text-sm font-medium text-white hover:bg-[rgb(var(--accent-hover))] disabled:opacity-50"
+                  >
+                    <KeyRound className="h-4 w-4" />
+                    {genLoading ? 'Generating…' : 'Confirm'}
+                  </button>
+                  <button
+                    onClick={() => { setReauthOpen(false); setReauthPw(''); setGenError('') }}
+                    disabled={genLoading}
+                    className="w-fit rounded-lg border border-[rgb(var(--border))] px-4 py-2 text-sm hover:bg-white/5 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={startGenerateRecovery}
+                disabled={genLoading}
+                className="flex w-fit items-center gap-2 rounded-lg border border-[rgb(var(--border))] px-4 py-2 text-sm hover:bg-white/5 disabled:opacity-50"
+              >
+                <KeyRound className="h-4 w-4" />
+                {hasRecovery ? 'Regenerate recovery key' : 'Generate recovery key'}
+              </button>
+            )}
+            {hasRecovery && !reauthOpen && <p className="text-xs text-[rgb(var(--success))]">A recovery key is configured.</p>}
             {genError && <p className="text-xs text-[rgb(var(--danger))]">{genError}</p>}
           </div>
         )}

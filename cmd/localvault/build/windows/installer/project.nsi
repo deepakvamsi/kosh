@@ -34,9 +34,9 @@ ManifestDPIAware true
 !define MUI_ABORTWARNING
 
 # ── License agreement page behaviour ────────────────────────────────────────
-# Require an explicit "I accept the terms" checkbox before Next is enabled. To
-# show proprietary terms instead of Apache-2.0, point MUI_PAGE_LICENSE (below) at
-# an EULA file (.txt or .rtf) — the wiring is identical.
+# Require an explicit "I accept the terms" checkbox before Next is enabled. Kosh ships
+# under a single licence (Apache-2.0) for both source and binaries, so this page always
+# shows the repository LICENSE.
 !define MUI_LICENSEPAGE_CHECKBOX
 !define MUI_LICENSEPAGE_TEXT_TOP "Please review the license terms before installing ${INFO_PRODUCTNAME}."
 
@@ -50,9 +50,6 @@ ManifestDPIAware true
 
 # ── Installer pages ────────────────────────────────────────────────────────────
 # Path is relative to this .nsi (build/windows/installer/) → repo-root LICENSE.
-# To ship the proprietary agreement instead of Apache-2.0, point this at the EULA:
-#   !insertmacro MUI_PAGE_LICENSE "..\..\..\..\..\EULA.txt"
-# (ship exactly one — see EULA.txt for guidance.)
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "..\..\..\..\..\LICENSE"
 !insertmacro MUI_PAGE_DIRECTORY

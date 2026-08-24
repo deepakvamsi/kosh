@@ -9,7 +9,7 @@ no "military grade" claims.
 
 | Purpose | Primitive | Parameters |
 |---------|-----------|------------|
-| Password-based key derivation | **Argon2id** | time=3, memory=64 MiB, threads=4 (tunable, stored in header), 16-byte random salt, 32-byte output |
+| Password-based key derivation | **Argon2id** | Calibrated at vault creation to ~750 ms on that machine, within time=3–10 and memory=64–512 MiB (threads=4). Stored per-vault in the header and raisable later without re-encrypting anything. 16-byte random salt, 32-byte output. |
 | Authenticated encryption | **XChaCha20-Poly1305** | 32-byte key, 24-byte random nonce, 16-byte tag |
 | Randomness | `crypto/rand` | salts, nonces, DEK, recovery key |
 | Integrity of audit log | SHA-256 hash chain | see THREAT_MODEL §6 |
@@ -107,5 +107,33 @@ identical either way. Trade-offs are documented in THREAT_MODEL §4.
 ## 9. Parameter tuning
 
 Argon2id parameters are stored in the vault header so they can be increased over time.
+
+**Calibration.** A fixed cost has to be chosen for the slowest machine anyone might run
+Kosh on, which leaves every faster machine protected below its means. Because the only
+barrier against an attacker who has copied `vault.db` is the KDF cost, that shortfall is
+the whole defence going unclaimed. `crypto.CalibrateKDFParams` therefore measures Argon2id
+on the machine creating the vault and picks the strongest parameters that still complete
+within roughly 750 ms.
+
+Memory is scaled before time passes, because memory hardness is what erodes an attacker's
+GPU and ASIC advantage. The result is clamped to `[64 MiB, 512 MiB]` and `[3, 10]`
+passes:
+
+* the **floor equals the historical default**, so calibration can only ever move a vault
+  stronger — a slow or noisy measurement cannot negotiate protection downward;
+* the **ceiling** exists because the cost is paid on every unlock, on the user's own
+  machine. Past ~512 MiB an unlock risks swapping, which is both slow and a route for key
+  material to reach the page file.
+
+**Raising the cost later.** `Vault.RekeyKDF` derives a new KEK under stronger parameters
+and re-wraps the DEK. The DEK itself never changes, so:
+
+* no secret is re-encrypted — there is nothing to re-encrypt incorrectly;
+* the audit MAC subkey is unchanged, so every existing audit record stays verifiable;
+* the recovery key keeps working, because it carries its own KDF parameters
+  (migration `0009`) rather than borrowing the master password's.
+
+Re-keying requires the master password, not merely an unlocked vault, and refuses any
+parameter set weaker than the current one in either dimension.
 On unlock, if stored params are below the current recommended floor, the UI can prompt
 a transparent re-derivation (rewrap DEK) to upgrade security without re-encrypting data.

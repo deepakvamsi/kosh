@@ -108,7 +108,7 @@ func (v *Vault) AddSecret(in AddSecretInput) (int64, error) {
 			return 0, fmt.Errorf("vault: store totp: %w", err)
 		}
 	}
-	if err := audit.LogTx(tx, v.actor, "create", in.Alias, audit.Allow, ""); err != nil {
+	if err := v.logAuditTx(tx, "create", in.Alias, audit.Allow, ""); err != nil {
 		return 0, fmt.Errorf("vault: audit create: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -157,7 +157,7 @@ func (v *Vault) revealRaw(alias string) (ItemType, []byte, error) {
 	ad := v.associatedData(id, providerKey, Environment(env))
 	pt, err := crypto.Decrypt(dek, blob, ad)
 	if err != nil {
-		_ = audit.Log(v.db.SQL(), v.actor, "reveal", alias, audit.Deny, "decrypt failed")
+		_ = v.logAudit("reveal", alias, audit.Deny, "decrypt failed")
 		return "", nil, err
 	}
 
@@ -171,7 +171,7 @@ func (v *Vault) revealRaw(alias string) (ItemType, []byte, error) {
 		crypto.Zero(pt)
 		return "", nil, err
 	}
-	if err := audit.LogTx(tx, v.actor, "reveal", alias, audit.Allow, ""); err != nil {
+	if err := v.logAuditTx(tx, "reveal", alias, audit.Allow, ""); err != nil {
 		crypto.Zero(pt)
 		return "", nil, fmt.Errorf("vault: audit reveal: %w", err)
 	}
@@ -223,7 +223,7 @@ func (v *Vault) UpdateValue(alias string, newValue []byte) error {
 		blob, valueHash, ts, id); err != nil {
 		return err
 	}
-	if err := audit.LogTx(tx, v.actor, "update", alias, audit.Allow, ""); err != nil {
+	if err := v.logAuditTx(tx, "update", alias, audit.Allow, ""); err != nil {
 		return fmt.Errorf("vault: audit update: %w", err)
 	}
 	return tx.Commit()
@@ -247,7 +247,7 @@ func (v *Vault) DeleteSecret(alias string) error {
 	if n == 0 {
 		return ErrNotFound
 	}
-	if err := audit.LogTx(tx, v.actor, "delete", alias, audit.Allow, ""); err != nil {
+	if err := v.logAuditTx(tx, "delete", alias, audit.Allow, ""); err != nil {
 		return fmt.Errorf("vault: audit delete: %w", err)
 	}
 	return tx.Commit()

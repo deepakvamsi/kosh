@@ -11,7 +11,7 @@
   <img alt="Frontend" src="https://img.shields.io/badge/UI-Wails%20%2B%20React-61DAFB?logo=react&logoColor=white">
   <img alt="No telemetry" src="https://img.shields.io/badge/telemetry-none-success">
   <img alt="Network" src="https://img.shields.io/badge/network-air--sealed-success">
-  <img alt="License" src="https://img.shields.io/badge/license-see%20below-lightgrey">
+  <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue">
 </p>
 
 <p align="center"><em>कोश — Sanskrit for the treasury that safeguards what's valuable.</em></p>
@@ -68,7 +68,7 @@ Pull your keys out of a dozen spreadsheets and into one treasury that actually p
 |---|---|
 | 🔑 **Envelope encryption** | An Argon2id-derived Key-Encryption-Key wraps a random Data-Encryption-Key; secret values are sealed with XChaCha20-Poly1305 AEAD. Nothing is stored in plaintext. |
 | 🗂️ **Typed items** | Store API keys, full **logins** (username + password), and **secure notes**. Every sensitive field — the username included — is encrypted inside the value blob; none of it touches a queryable column. |
-| 🧾 **Tamper-evident audit log** | Every action is a hash-chained record — edit or delete one entry and `VerifyChain()` pinpoints exactly where the chain broke. |
+| 🧾 **Tamper-evident audit log** | Every action is a hash-chained record, and every record written while unlocked is HMAC'd under a key derived from your master password, with the chain head anchored. Editing, deleting or truncating entries is detected even by someone with full write access to the database file. |
 | 📴 **Air-sealed** | No cloud, no login server, no telemetry, no listener. A build-time guard (`internal/seal`) rejects any networking import so the offline guarantee can't silently regress. |
 | 👁️ **Names without values** | Browse *which* secrets you have (`OPENAI_PROD`, `AWS_STAGING`) without decrypting a single value; decryption happens only on an explicit, audited reveal. |
 | 🩺 **Credential health** | Flags expired, expiring-soon, unused, stale, and duplicate credentials so you actually rotate them. |
@@ -94,13 +94,43 @@ Pull your keys out of a dozen spreadsheets and into one treasury that actually p
 
 Kosh isn't trying to be a cloud platform or a service mesh. It's the vault for the keys that live on *your* laptop.
 
+### …1Password or Bitwarden?
+
+They're mature, audited, full-featured password managers for **every device** — sync, mobile apps, browser autofill, sharing, passkeys, and independent certifications that Kosh does **not** offer. For everyday password management across your phone, browser, and team, use them.
+
+They solve **team credential sharing** with a hosted service and a browser
+extension. Kosh solves **one machine, no account, no network**. Different problems — most
+people who need one do not need the other.
+
+Rather than grade competitors on a scorecard, here is precisely what Kosh does, each row
+verifiable in this repository:
+
+| Property | Kosh | Where to verify |
+|---|---|---|
+| Runs with zero network connections | Yes — enforced by a test that fails the build if any first-party package imports a networking package | [`internal/seal`](internal/seal) |
+| No account, no server, no sync | Yes — there is no server component in this repository | — |
+| Source available under Apache-2.0 | Yes | [`LICENSE`](LICENSE) |
+| Free, no paid tier | Yes | — |
+| Argon2id key derivation | Yes — memory-hard, per-vault random salt, cost calibrated to your machine at setup and raisable later | [`internal/crypto`](internal/crypto) |
+| Secrets sealed with XChaCha20-Poly1305 | Yes — envelope encryption: Argon2id → KEK wraps a random DEK | [`docs/CRYPTO.md`](docs/CRYPTO.md) |
+| Audit log authenticated, not just chained | Yes — hash-chained, plus per-record HMAC under a DEK-derived subkey and an anchored head | [`internal/audit`](internal/audit) |
+| Every reveal recorded locally | Yes — one reveal at a time, each an audit record | [`docs/DB_SCHEMA.md`](docs/DB_SCHEMA.md) |
+| No API or extension surface to exfiltrate through | Yes — the only interface is the app's own UI | [`docs/SECURITY_ISOLATION.md`](docs/SECURITY_ISOLATION.md) |
+| Screen-capture exclusion | Yes on Windows (`WDA_EXCLUDEFROMCAPTURE`) and macOS (`NSWindowSharingNone`); not available on Linux | [`internal/screenguard`](internal/screenguard) |
+
+Reach for Kosh when you specifically need **no account, no cloud, a provable air-gap, and
+a tamper-evident local reveal history** for keys that should live only on your laptop.
+Reach for a hosted manager when you need to share credentials across a team, sync to a
+phone, or autofill in a browser — Kosh does none of those, by design.
+
+
 ---
 
 ## 🔒 Security at a glance
 
 | Property | How it's achieved |
 |---|---|
-| Password-based key derivation | **Argon2id** (memory-hard), per-vault random salt, tunable cost stored in the vault header |
+| Password-based key derivation | **Argon2id** (memory-hard), per-vault random salt. Cost is calibrated to your machine when the vault is created (64–512 MiB, targeting ~750 ms per unlock) and can be raised later from Settings without re-encrypting a thing. |
 | Authenticated encryption | **XChaCha20-Poly1305**; each value's ciphertext binds its row id + provider + environment as associated data |
 | Key hierarchy | Master password → **KEK** (Argon2id) → wraps random **DEK** → encrypts secrets. The DEK exists in memory only while unlocked. |
 | Audit integrity | Append-only log, `hash = SHA-256(prev_hash ‖ record)` |
@@ -234,7 +264,13 @@ Issues and PRs are welcome. Please run `go test ./...` and `go vet ./...` before
 
 ## 📄 License
 
-Licensed under the **Apache License 2.0** — see [`LICENSE`](LICENSE). Third-party components and their licenses are listed in [`NOTICE`](NOTICE) and [`DEPENDENCIES.md`](DEPENDENCIES.md).
+Kosh is licensed under the **Apache License 2.0** — see [`LICENSE`](LICENSE). That single
+licence covers the source and the official binaries alike: there are no additional terms,
+no separate end-user agreement, and no distinction between building it yourself and
+downloading a release.
+
+Third-party components and their licenses are listed in [`NOTICE`](NOTICE) and
+[`DEPENDENCIES.md`](DEPENDENCIES.md).
 
 ## 🔎 Keywords
 

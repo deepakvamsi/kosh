@@ -93,6 +93,7 @@ type Vault struct {
 	mu     sync.Mutex
 	dek    []byte // nil when locked; zeroized on Lock
 	hmac   []byte // vault-scoped subkey for duplicate-detection keyed hash
+	audKey []byte // vault-scoped subkey authenticating audit records; nil when locked
 	actor  string // audit actor label for this session, e.g. "ui"
 	autoAt time.Time
 }
@@ -146,10 +147,22 @@ func (v *Vault) Unlocked() bool {
 	return v.dek != nil
 }
 
-// Init creates a new vault protected by the master password. It generates a random
-// DEK, wraps it under a KEK derived from the password, stores a verifier, and leaves
-// the vault unlocked. Returns ErrAlreadyInitialized if a vault already exists.
+// Init creates a new vault protected by the master password, using the baseline
+// Argon2id cost. Callers that want cost matched to the machine (the desktop app does)
+// should use InitWithParams with crypto.CalibrateKDFParams — Init keeps the cheap floor
+// so tests and tooling are not forced to pay calibration on every vault they create.
 func (v *Vault) Init(password []byte) error {
+	return v.InitWithParams(password, crypto.DefaultKDFParams())
+}
+
+// InitWithParams creates a new vault protected by the master password. It generates a
+// random DEK, wraps it under a KEK derived from the password with the given Argon2id
+// cost, stores a verifier, and leaves the vault unlocked. Returns ErrAlreadyInitialized
+// if a vault already exists, or ErrBadKDFParams if params are out of range.
+func (v *Vault) InitWithParams(password []byte, params crypto.KDFParams) error {
+	if !crypto.ValidKDFParams(params) {
+		return ErrBadKDFParams
+	}
 	init, err := v.IsInitialized()
 	if err != nil {
 		return err
@@ -158,7 +171,6 @@ func (v *Vault) Init(password []byte) error {
 		return ErrAlreadyInitialized
 	}
 
-	params := crypto.DefaultKDFParams()
 	salt, err := crypto.NewSalt()
 	if err != nil {
 		return err
@@ -183,10 +195,21 @@ func (v *Vault) Init(password []byte) error {
 
 	ts := time.Now().Unix()
 
+	// Install the audit subkey before writing the "init" record so the very first
+	// entry in the log is authenticated like every later one. Cleared again on any
+	// failure path below, so a failed Init leaves no key material behind.
+	v.mu.Lock()
+	v.audKey = crypto.KeyedHash(dek, []byte("localvault/audit-mac-subkey"))
+	v.mu.Unlock()
+	failInit := func(err error) error {
+		crypto.Zero(dek)
+		v.Lock() // zeroizes the audit subkey; dek/hmac are not installed yet
+		return err
+	}
+
 	tx, err := v.db.SQL().Begin()
 	if err != nil {
-		crypto.Zero(dek)
-		return err
+		return failInit(err)
 	}
 	defer tx.Rollback()
 	if _, err = tx.Exec(
@@ -194,16 +217,13 @@ func (v *Vault) Init(password []byte) error {
 		 VALUES(1,'argon2id',?,?,?,?,?,?,1,?,?)`,
 		params.Time, params.MemoryKiB, params.Threads, salt, verifier, wrapped, ts, ts,
 	); err != nil {
-		crypto.Zero(dek)
-		return fmt.Errorf("vault: write meta: %w", err)
+		return failInit(fmt.Errorf("vault: write meta: %w", err))
 	}
-	if err = audit.LogTx(tx, v.actor, "init", "", audit.Allow, ""); err != nil {
-		crypto.Zero(dek)
-		return fmt.Errorf("vault: audit init: %w", err)
+	if err = v.logAuditTx(tx, "init", "", audit.Allow, ""); err != nil {
+		return failInit(fmt.Errorf("vault: audit init: %w", err))
 	}
 	if err = tx.Commit(); err != nil {
-		crypto.Zero(dek)
-		return fmt.Errorf("vault: commit init: %w", err)
+		return failInit(fmt.Errorf("vault: commit init: %w", err))
 	}
 
 	v.mu.Lock()
@@ -230,7 +250,7 @@ func (v *Vault) Unlock(password []byte) error {
 	// spending Argon2id — this both enforces the wait and avoids wasting CPU on an
 	// attacker's guesses.
 	if v.LockoutRemaining() > 0 {
-		_ = audit.Log(v.db.SQL(), v.actor, "unlock", "", audit.Deny, "locked out")
+		_ = v.logAudit("unlock", "", audit.Deny, "locked out")
 		return ErrTooManyAttempts
 	}
 
@@ -249,13 +269,13 @@ func (v *Vault) Unlock(password []byte) error {
 	defer crypto.Zero(kek)
 
 	if !crypto.CheckVerifier(kek, verifier) {
-		_ = audit.Log(v.db.SQL(), v.actor, "unlock", "", audit.Deny, "wrong password")
+		_ = v.logAudit("unlock", "", audit.Deny, "wrong password")
 		v.recordUnlockFailure()
 		return ErrWrongPassword
 	}
 	dek, err := crypto.UnwrapKey(kek, wrapped)
 	if err != nil {
-		_ = audit.Log(v.db.SQL(), v.actor, "unlock", "", audit.Deny, "unwrap failed")
+		_ = v.logAudit("unlock", "", audit.Deny, "unwrap failed")
 		v.recordUnlockFailure()
 		return ErrWrongPassword
 	}
@@ -263,11 +283,48 @@ func (v *Vault) Unlock(password []byte) error {
 	v.mu.Lock()
 	v.dek = dek
 	v.hmac = crypto.KeyedHash(dek, []byte("localvault/duplicate-subkey"))
+	v.audKey = crypto.KeyedHash(dek, []byte("localvault/audit-mac-subkey"))
 	v.touch()
 	v.mu.Unlock()
 
 	v.resetUnlockFailures()
-	_ = audit.Log(v.db.SQL(), v.actor, "unlock", "", audit.Allow, "")
+	_ = v.logAudit("unlock", "", audit.Allow, "")
+	return nil
+}
+
+// VerifyPassword re-checks the master password without changing the lock state. It is
+// the re-authentication gate for privileged operations on an already-unlocked vault
+// (minting a recovery key, exporting a backup, destroying the vault) — an unlocked
+// window must not be enough to perform them.
+//
+// It deliberately does NOT touch the unlock lockout counters: the vault is already
+// unlocked, so an attacker at the keyboard holds the DEK regardless and this is not a
+// meaningful brute-force oracle. Locking the user out of their own re-auth prompt would
+// cost availability for no security gain. Both outcomes are audited.
+func (v *Vault) VerifyPassword(password []byte) error {
+	if !v.Unlocked() {
+		return ErrLocked
+	}
+
+	var (
+		p        crypto.KDFParams
+		salt     []byte
+		verifier []byte
+	)
+	row := v.db.SQL().QueryRow(`SELECT kdf_time,kdf_memory_kib,kdf_threads,kdf_salt,verifier FROM vault_meta WHERE id=1`)
+	if err := row.Scan(&p.Time, &p.MemoryKiB, &p.Threads, &salt, &verifier); err != nil {
+		return fmt.Errorf("vault: read meta: %w", err)
+	}
+
+	kek := crypto.DeriveKey(password, salt, p)
+	defer crypto.Zero(kek)
+
+	if !crypto.CheckVerifier(kek, verifier) {
+		_ = v.logAudit("reauth", "", audit.Deny, "wrong password")
+		return ErrWrongPassword
+	}
+	_ = v.logAudit("reauth", "", audit.Allow, "")
+	v.Touch()
 	return nil
 }
 
@@ -283,6 +340,10 @@ func (v *Vault) Lock() {
 		crypto.Zero(v.hmac)
 		v.hmac = nil
 	}
+	if v.audKey != nil {
+		crypto.Zero(v.audKey)
+		v.audKey = nil
+	}
 }
 
 // AutoLockIfIdle locks the vault if more than d has elapsed since the last activity.
@@ -292,8 +353,11 @@ func (v *Vault) AutoLockIfIdle(d time.Duration) bool {
 	idle := v.dek != nil && time.Since(v.autoAt) >= d
 	v.mu.Unlock()
 	if idle {
+		// Log BEFORE zeroizing: Lock() destroys the audit subkey, and an auto-lock
+		// record that cannot be authenticated is exactly the record an attacker
+		// would want to forge.
+		_ = v.logAudit("autolock", "", audit.Allow, "")
 		v.Lock()
-		_ = audit.Log(v.db.SQL(), v.actor, "autolock", "", audit.Allow, "")
 		return true
 	}
 	return false

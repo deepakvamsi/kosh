@@ -26,8 +26,15 @@ export default function UnlockScreen({ onUnlocked }: Props) {
   const [recConfirm, setRecConfirm] = useState('')
 
   React.useEffect(() => {
-    api.isInitialized().then(v => setIsNew(!v))
-    api.hasRecoveryKey().then(setHasRecovery)
+    // Only treat the vault as new when the backend positively says so. On a read
+    // failure, stay on the unlock screen and show the error — offering to create a
+    // vault over one that merely failed to open is how a user concludes their secrets
+    // are gone.
+    api.isInitialized().then(r => {
+      if (r.err) { setError(r.err); return }
+      setIsNew(!r.value)
+    })
+    api.hasRecoveryKey().then(r => setHasRecovery(!r.err && r.value))
     api.unlockStatus().then(setLockSeconds).catch(() => {})
   }, [])
 

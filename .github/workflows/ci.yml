@@ -5,8 +5,91 @@ on:
     branches: [main]
   pull_request:
 
+# The repo is TWO Go modules: the root (kosh) and the Wails app (kosh/cmd/localvault,
+# which `replace`s kosh => ../../). `go test ./...` at the root does NOT descend into a
+# nested module, so every job below runs both explicitly. Missing this is how app.go
+# stayed uncompiled by CI.
 jobs:
   test:
+    # Kosh ships Windows, Linux and macOS builds, and the platform-specific security
+    # code (DACL hardening, screen-capture exclusion, per-OS data dirs) only compiles
+    # under its own GOOS. A single-runner job never builds it — so the matrix is the
+    # gate, not a nicety.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.25' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      # Linux needs GTK/WebKit headers before the Wails app module will build.
+      - name: Install Linux GUI toolchain
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      # The air-seal test walks cmd/localvault, which embeds frontend/dist — build it
+      # first so the embed directive resolves on a clean checkout.
+      - name: Install frontend deps
+        working-directory: cmd/localvault/frontend
+        run: npm ci
+      - name: Typecheck frontend
+        working-directory: cmd/localvault/frontend
+        run: npx tsc --noEmit
+      - name: Build frontend
+        working-directory: cmd/localvault/frontend
+        run: npm run build
+
+      # Formatting is checked on Linux only. Line endings are normalised to LF in the
+      # index (.gitattributes), but a Windows runner can still present CRLF working
+      # copies, which gofmt reports as unformatted — noise, not a finding.
+      - name: gofmt
+        if: runner.os == 'Linux'
+        run: |
+          # gofmt walks directories, not modules, so this covers cmd/localvault too.
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::these files are not gofmt-clean:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet (root module)
+        run: go vet ./...
+      - name: go vet (app module)
+        working-directory: cmd/localvault
+        run: go vet ./...
+
+      - name: go build (compiles every GOOS-specific file on this runner)
+        run: go build ./...
+      - name: go build (app module)
+        working-directory: cmd/localvault
+        run: go build ./...
+
+      # Kosh builds CGO-free (modernc.org/sqlite) but -race requires cgo and a C
+      # toolchain. Linux/macOS runners ship one; the Windows runner does not, so it
+      # runs the suite without the race detector rather than installing a compiler
+      # the shipped binary never uses.
+      - name: go test -race (includes the network air-seal guard)
+        if: runner.os != 'Windows'
+        env: { CGO_ENABLED: '1' }
+        run: |
+          go test -race ./...
+          cd cmd/localvault && go test -race ./...
+      - name: go test (includes the network air-seal guard)
+        if: runner.os == 'Windows'
+        run: |
+          go test ./...
+          cd cmd/localvault
+          go test ./...
+
+  vulncheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,12 +97,20 @@ jobs:
         with: { go-version: '1.25' }
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
-      # The air-seal test analyzes cmd/localvault, which embeds frontend/dist — build it
-      # first so the embed directive resolves on a clean checkout.
+      - name: Install Linux GUI toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+      # govulncheck loads packages, so the frontend/dist embed must resolve.
       - name: Build frontend
         working-directory: cmd/localvault/frontend
         run: npm ci && npm run build
-      - name: go vet
-        run: go vet ./...
-      - name: go test (includes the network air-seal guard)
-        run: go test ./...
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: govulncheck (root module)
+        run: govulncheck ./...
+      # The app module is where the real third-party surface lives (Wails, echo,
+      # gorilla/websocket), so scanning only the root would miss most of it.
+      - name: govulncheck (app module)
+        working-directory: cmd/localvault
+        run: govulncheck ./...

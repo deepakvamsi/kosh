@@ -32,6 +32,28 @@ export type RevealedItem = {
 }
 
 export type BoolResult = { ok: boolean; err?: string }
+
+// BoolQuery is a boolean the backend had to read from the database, so the read can
+// fail. Check `err` before trusting `value` — for "is there a vault?" and "is there a
+// recovery key?" a wrong `false` is worse than showing an error.
+export type BoolQuery = { value: boolean; err?: string }
+
+// KdfParams describes the Argon2id cost protecting the vault, plus what this machine
+// could sustain. `canStrengthen` is the backend's own comparison — trust it rather than
+// re-deriving the comparison in the UI.
+export type KdfParams = {
+  time: number
+  memoryKiB: number
+  threads: number
+  suggestedTime: number
+  suggestedMemoryKiB: number
+  canStrengthen: boolean
+  err?: string
+}
+
+// SecretList separates "no secrets" from "could not read the secrets". `items` is always
+// an array, never null.
+export type SecretList = { items: SecretSummary[]; err?: string }
 export type IDResult   = { id: number; err?: string }
 
 export type HealthItem = {

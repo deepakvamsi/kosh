@@ -2,6 +2,13 @@
 // hash-chained to the previous one: hash = SHA-256(prev_hash || canonical(record)).
 // Any deletion or edit breaks the chain, which VerifyChain detects. Secret values are
 // never written to the audit log (see docs/THREAT_MODEL.md §6).
+//
+// The hash chain alone only resists ACCIDENTAL damage: it involves no secret, so an
+// adversary with write access to vault.db can edit a record and recompute every hash
+// after it. Resistance to that adversary comes from the keyed layer in keyed.go —
+// per-record HMACs under a DEK-derived subkey plus an anchored chain head. Records
+// written while the vault is locked cannot be keyed (no DEK exists) and are
+// chain-only; see VerifyChainKeyed for exactly what each layer guarantees.
 package audit
 
 import (
@@ -9,8 +16,6 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/binary"
-	"fmt"
-	"time"
 )
 
 // Outcome is either allow or deny.
@@ -70,25 +75,12 @@ func chainHash(prev []byte, ts int64, actor, action, target string, outcome Outc
 // records: if the mutation rolls back, so does its audit row, and vice versa. This is
 // how state-changing vault operations keep the tamper-evident log consistent with the
 // data (see docs/THREAT_MODEL.md §6).
+//
+// It writes an unauthenticated (chain-only) record. Prefer LogTxKeyed with the vault's
+// audit subkey whenever the vault is unlocked — an unkeyed record can be rewritten by
+// anyone with database write access.
 func LogTx(tx *sql.Tx, actor, action, target string, outcome Outcome, detail string) error {
-	var prev []byte
-	err := tx.QueryRow(`SELECT hash FROM audit_log ORDER BY seq DESC LIMIT 1`).Scan(&prev)
-	if err == sql.ErrNoRows {
-		prev = genesis
-	} else if err != nil {
-		return fmt.Errorf("audit: read last hash: %w", err)
-	}
-
-	ts := time.Now().Unix()
-	h := chainHash(prev, ts, actor, action, target, outcome, detail)
-
-	if _, err := tx.Exec(
-		`INSERT INTO audit_log(ts,actor,action,target,outcome,detail,prev_hash,hash) VALUES(?,?,?,?,?,?,?,?)`,
-		ts, actor, action, target, string(outcome), detail, prev, h,
-	); err != nil {
-		return fmt.Errorf("audit: insert: %w", err)
-	}
-	return nil
+	return LogTxKeyed(tx, nil, actor, action, target, outcome, detail)
 }
 
 // Log appends a new audit record in its own transaction. Use it for session-lifecycle

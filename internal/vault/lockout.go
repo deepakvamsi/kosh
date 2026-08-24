@@ -88,7 +88,7 @@ func (v *Vault) recordUnlockFailure() {
 	var until int64
 	if d := backoffFor(fails); d > 0 {
 		until = time.Now().Unix() + int64(d.Seconds())
-		_ = audit.Log(v.db.SQL(), v.actor, "unlock_lockout", "", audit.Deny,
+		_ = v.logAudit("unlock_lockout", "", audit.Deny,
 			fmt.Sprintf("%d consecutive failures; locked for %s", fails, d))
 	}
 	_ = v.writeSetting(settingUnlockFails, strconv.Itoa(fails))

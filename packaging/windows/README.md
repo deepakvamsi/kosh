@@ -75,6 +75,6 @@ downloaders can verify integrity.
 
 - **WebView2**: the Wails app needs the WebView2 runtime. It ships with current Windows
   10/11; for older images, chain the Evergreen bootstrapper or require it via your MDM.
-- **License page**: the NSIS installer shows `LICENSE` (Apache-2.0) by default. To ship
-  the proprietary `EULA.txt` instead, see the commented line in
-  `cmd/localvault/build/windows/installer/project.nsi`. Ship exactly one.
+- **License page**: the NSIS installer shows the repository `LICENSE` (Apache-2.0). Kosh
+  ships under that one licence for source and binaries alike — there is no separate
+  end-user agreement to substitute.

@@ -56,7 +56,7 @@ type SecretHealth struct {
 	Alias      string
 	Status     Status
 	Flags      []Flag
-	Score      int // 0 (critical) … 100 (perfect)
+	Score      int      // 0 (critical) … 100 (perfect)
 	DupAliases []string // aliases of secrets with the same value_hash
 }
 

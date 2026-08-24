@@ -1,0 +1,38 @@
+version: 2
+
+# Kosh is a secrets manager, so a dependency it pulls in is a dependency that shares a
+# process with plaintext keys. There are FOUR distinct manifests, and missing any one of
+# them leaves that surface unwatched:
+#   - the root Go module (crypto, sqlite, excelize)
+#   - the Wails app Go module, which is where the large third-party surface actually
+#     lives (Wails, echo, gorilla/websocket)
+#   - the frontend npm manifest
+#   - the GitHub Actions used by CI and release
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(go)"
+
+  - package-ecosystem: gomod
+    directory: /cmd/localvault
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(app)"
+
+  - package-ecosystem: npm
+    directory: /cmd/localvault/frontend
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(ui)"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"

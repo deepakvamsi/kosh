@@ -87,7 +87,7 @@ reveal or copy, one at a time, and every such action is written to the audit log
   migrations, ciphertext CRUD, per-OS data directory, file-permission hardening.
 - **`internal/vault`** — Domain core: init/unlock/lock, auto-lock, secret CRUD, alias
   resolution, environments, tags/folders. **Listing names never decrypts values.**
-- **`internal/audit`** — Append-only, hash-chained (tamper-evident) audit log.
+- **`internal/audit`** — Append-only, hash-chained audit log. Records written while the vault is unlocked are also HMAC'd under a DEK-derived subkey with the chain head anchored in `vault_meta`, which is what makes the log tamper-evident against an adversary rather than only against corruption (`keyed.go`).
 - **`internal/health`** — Token health/scoring; expired/unused/old/duplicate detection.
 - **`internal/backup`** — Encrypted export/import of the vault.
 - **`internal/import`** — One-time importer for your existing Excel/CSV sheets.

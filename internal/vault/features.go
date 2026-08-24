@@ -64,7 +64,7 @@ func (v *Vault) SetTOTP(alias, seed string) error {
 		if _, err := v.db.SQL().Exec(`UPDATE secrets SET totp_enc=NULL WHERE id=?`, id); err != nil {
 			return err
 		}
-		_ = audit.Log(v.db.SQL(), v.actor, "totp_remove", alias, audit.Allow, "")
+		_ = v.logAudit("totp_remove", alias, audit.Allow, "")
 		return nil
 	}
 
@@ -75,7 +75,7 @@ func (v *Vault) SetTOTP(alias, seed string) error {
 	if _, err := v.db.SQL().Exec(`UPDATE secrets SET totp_enc=? WHERE id=?`, blob, id); err != nil {
 		return err
 	}
-	_ = audit.Log(v.db.SQL(), v.actor, "totp_set", alias, audit.Allow, "")
+	_ = v.logAudit("totp_set", alias, audit.Allow, "")
 	return nil
 }
 

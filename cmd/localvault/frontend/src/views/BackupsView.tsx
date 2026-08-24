@@ -11,7 +11,9 @@ export default function BackupsView() {
     if (!pw) { setMsg('Enter your master password first'); return }
     setLoading(true); setMsg('')
     try {
-      const bytes = await api.exportBackup(pw)
+      // The same master password both re-authenticates the operator and seals the
+      // backup file, so a restore needs exactly what the user already knows.
+      const bytes = await api.exportBackup(pw, pw)
       const blob = new Blob([new Uint8Array(bytes)], { type: 'application/octet-stream' })
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)

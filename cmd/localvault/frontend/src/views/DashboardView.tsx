@@ -18,12 +18,15 @@ const statusIcon = (s: string) => {
 }
 
 export default function DashboardView({ onNav }: { onNav: (v: string) => void }) {
-  const [total, setTotal] = useState(0)
+  // null = the count could not be read. Distinct from 0, which is a real claim.
+  const [total, setTotal] = useState<number | null>(0)
   const [health, setHealth] = useState<HealthItem[]>([])
   const [version, setVersion] = useState('')
 
   useEffect(() => {
-    api.listSecrets('', '', '', false).then(s => setTotal((s ?? []).length))
+    // Leave the count blank rather than showing 0 when the read failed — "0 secrets"
+    // is a claim, not a placeholder.
+    api.listSecrets('', '', '', false).then(r => setTotal(r.err ? null : r.items.length))
     api.getHealth().then(h => setHealth(h ?? []))
     api.getVersion().then(setVersion)
   }, [])
@@ -34,7 +37,7 @@ export default function DashboardView({ onNav }: { onNav: (v: string) => void })
   const needsAttention = health.filter(h => h.status !== 'healthy').sort((a, b) => a.score - b.score)
 
   const cards = [
-    { label: 'Secrets',  value: total,    icon: <Key className="h-5 w-5" />,         color: 'rgb(var(--accent))' },
+    { label: 'Secrets',  value: total ?? '—',    icon: <Key className="h-5 w-5" />,         color: 'rgb(var(--accent))' },
     { label: 'Critical', value: critical, icon: <ShieldX className="h-5 w-5" />,     color: 'rgb(var(--danger))' },
     { label: 'Warnings', value: warning,  icon: <ShieldAlert className="h-5 w-5" />, color: 'rgb(var(--warn))' },
     { label: 'Healthy',  value: healthy,  icon: <ShieldCheck className="h-5 w-5" />, color: 'rgb(var(--success))' },

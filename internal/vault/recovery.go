@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"database/sql"
 	"encoding/base32"
 	"errors"
 	"fmt"
@@ -40,7 +41,10 @@ func (v *Vault) GenerateRecoveryKey() (string, error) {
 	}
 	defer crypto.Zero(dek)
 
-	// Reuse the vault's own Argon2id cost parameters for the recovery KDF.
+	// Start from the vault's own Argon2id cost, then STORE it in the recovery-specific
+	// columns. The recovery slot must remember the parameters its RKEK was derived
+	// under; re-keying the master password later changes kdf_* and would otherwise
+	// leave this key underivable (see migration 0009).
 	var p crypto.KDFParams
 	if err := v.db.SQL().QueryRow(
 		`SELECT kdf_time,kdf_memory_kib,kdf_threads FROM vault_meta WHERE id=1`).
@@ -72,11 +76,13 @@ func (v *Vault) GenerateRecoveryKey() (string, error) {
 	}
 	defer tx.Rollback()
 	if _, err := tx.Exec(
-		`UPDATE vault_meta SET recovery_salt=?, dek_recovery=?, updated_at=? WHERE id=1`,
-		salt, wrapped, time.Now().Unix()); err != nil {
+		`UPDATE vault_meta SET recovery_salt=?, dek_recovery=?,
+		        recovery_kdf_time=?, recovery_kdf_memory_kib=?, recovery_kdf_threads=?,
+		        updated_at=? WHERE id=1`,
+		salt, wrapped, p.Time, p.MemoryKiB, p.Threads, time.Now().Unix()); err != nil {
 		return "", fmt.Errorf("vault: store recovery key: %w", err)
 	}
-	if err := audit.LogTx(tx, v.actor, "recovery_key_set", "", audit.Allow, ""); err != nil {
+	if err := v.logAuditTx(tx, "recovery_key_set", "", audit.Allow, ""); err != nil {
 		return "", fmt.Errorf("vault: audit recovery_key_set: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -111,17 +117,34 @@ func (v *Vault) RecoverWithKey(recoveryCode string, newPassword []byte) error {
 	}
 
 	var (
-		p       crypto.KDFParams
+		vaultP  crypto.KDFParams
 		recSalt []byte
 		dekRec  []byte
+		recT    sql.NullInt64
+		recM    sql.NullInt64
+		recN    sql.NullInt64
 	)
 	if err := v.db.SQL().QueryRow(
-		`SELECT kdf_time,kdf_memory_kib,kdf_threads,recovery_salt,dek_recovery FROM vault_meta WHERE id=1`).
-		Scan(&p.Time, &p.MemoryKiB, &p.Threads, &recSalt, &dekRec); err != nil {
+		`SELECT kdf_time,kdf_memory_kib,kdf_threads,recovery_salt,dek_recovery,
+		        recovery_kdf_time,recovery_kdf_memory_kib,recovery_kdf_threads
+		   FROM vault_meta WHERE id=1`).
+		Scan(&vaultP.Time, &vaultP.MemoryKiB, &vaultP.Threads, &recSalt, &dekRec,
+			&recT, &recM, &recN); err != nil {
 		return fmt.Errorf("vault: read meta: %w", err)
 	}
 	if len(recSalt) == 0 || len(dekRec) == 0 {
 		return ErrNoRecoveryKey
+	}
+
+	// Derive the RKEK with the parameters the recovery key was CREATED under. NULL means
+	// a pre-0009 vault, whose RKEK used the shared kdf_* values.
+	p := vaultP
+	if recT.Valid && recM.Valid && recN.Valid {
+		p = crypto.KDFParams{
+			Time:      uint32(recT.Int64),
+			MemoryKiB: uint32(recM.Int64),
+			Threads:   uint8(recN.Int64),
+		}
 	}
 
 	normalized := normalizeRecoveryCode(recoveryCode)
@@ -132,13 +155,18 @@ func (v *Vault) RecoverWithKey(recoveryCode string, newPassword []byte) error {
 	defer crypto.Zero(rkek)
 	dek, err := crypto.UnwrapKey(rkek, dekRec)
 	if err != nil {
-		_ = audit.Log(v.db.SQL(), v.actor, "recover", "", audit.Deny, "invalid recovery key")
+		_ = v.logAudit("recover", "", audit.Deny, "invalid recovery key")
 		return ErrWrongRecoveryKey
 	}
 	defer crypto.Zero(dek)
 
-	// Re-key under the new master password.
-	params := crypto.DefaultKDFParams()
+	// Re-key under the new master password, PRESERVING the vault's existing cost. Using
+	// DefaultKDFParams() here would quietly downgrade a calibrated vault to the floor
+	// every time someone recovered — a security regression triggered by a recovery.
+	params := vaultP
+	if !crypto.ValidKDFParams(params) {
+		params = crypto.DefaultKDFParams()
+	}
 	newSalt, err := crypto.NewSalt()
 	if err != nil {
 		return err
@@ -154,6 +182,13 @@ func (v *Vault) RecoverWithKey(recoveryCode string, newPassword []byte) error {
 		return err
 	}
 
+	// Recovery re-wraps the SAME DEK under a new password, so the audit subkey is
+	// unchanged and every existing record MAC stays valid. Install it before writing
+	// the "recover" record so that record is authenticated too.
+	v.mu.Lock()
+	v.audKey = crypto.KeyedHash(dek, []byte("localvault/audit-mac-subkey"))
+	v.mu.Unlock()
+
 	tx, err := v.db.SQL().Begin()
 	if err != nil {
 		return err
@@ -166,7 +201,7 @@ func (v *Vault) RecoverWithKey(recoveryCode string, newPassword []byte) error {
 		time.Now().Unix()); err != nil {
 		return fmt.Errorf("vault: rekey: %w", err)
 	}
-	if err := audit.LogTx(tx, v.actor, "recover", "", audit.Allow, ""); err != nil {
+	if err := v.logAuditTx(tx, "recover", "", audit.Allow, ""); err != nil {
 		return fmt.Errorf("vault: audit recover: %w", err)
 	}
 	if err := tx.Commit(); err != nil {

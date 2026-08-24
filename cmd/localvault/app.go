@@ -11,6 +11,7 @@ import (
 
 	lv_audit "kosh/internal/audit"
 	lv_backup "kosh/internal/backup"
+	lv_crypto "kosh/internal/crypto"
 	lv_datadir "kosh/internal/datadir"
 	lv_health "kosh/internal/health"
 	lv_importer "kosh/internal/importer"
@@ -142,23 +143,103 @@ func fail(err error) BoolResult {
 	return BoolResult{Err: err.Error()}
 }
 
-func (a *App) IsInitialized() bool {
+// BoolQueryDTO carries a boolean that had to be read from the database, so the read
+// itself can fail. A bare bool would force the failure to masquerade as `false`, and for
+// these particular questions a wrong `false` is actively harmful: it tells the UI the
+// vault does not exist, or that there is no recovery key.
+type BoolQueryDTO struct {
+	Value bool   `json:"value"`
+	Err   string `json:"err,omitempty"`
+}
+
+// IsInitialized reports whether a vault exists. On a read failure Value is false AND Err
+// is set — the caller must check Err before treating false as "show the create-vault
+// screen", because offering to create a vault over one that merely failed to read is how
+// a user concludes their secrets are gone.
+func (a *App) IsInitialized() BoolQueryDTO {
 	if a.vault == nil {
-		return false
+		return BoolQueryDTO{Err: errVaultUnavailable.Error()}
 	}
-	init, _ := a.vault.IsInitialized()
-	return init
+	init, err := a.vault.IsInitialized()
+	if err != nil {
+		return BoolQueryDTO{Err: err.Error()}
+	}
+	return BoolQueryDTO{Value: init}
 }
 
 func (a *App) IsUnlocked() bool {
 	return a.vault != nil && a.vault.Unlocked()
 }
 
+// InitVault creates the vault. The Argon2id cost is calibrated to THIS machine rather
+// than fixed at the historical floor: vault.db is a file, so a copied vault is attacked
+// offline at whatever speed the attacker's hardware allows, and the KDF cost is the only
+// thing in the way. Calibration only ever moves the cost up from the old default, so a
+// slow machine is no worse off than before.
 func (a *App) InitVault(password string) BoolResult {
 	if a.vault == nil {
 		return BoolResult{Err: "vault not opened"}
 	}
-	return fail(a.vault.Init([]byte(password)))
+	params := lv_crypto.CalibrateKDFParams(lv_crypto.DefaultCalibrationTarget)
+	return fail(a.vault.InitWithParams([]byte(password), params))
+}
+
+// KDFParamsDTO reports the Argon2id cost protecting the vault, plus what this machine
+// could sustain, so the UI can offer an upgrade when the gap is real.
+type KDFParamsDTO struct {
+	Time          uint32 `json:"time"`
+	MemoryKiB     uint32 `json:"memoryKiB"`
+	Threads       uint8  `json:"threads"`
+	SuggestedTime uint32 `json:"suggestedTime"`
+	SuggestedMem  uint32 `json:"suggestedMemoryKiB"`
+	CanStrengthen bool   `json:"canStrengthen"`
+	Err           string `json:"err,omitempty"`
+}
+
+// GetKDFParams returns the vault's current KDF cost alongside a calibrated suggestion.
+// Calibration runs an Argon2id derivation, so this is not a free call — the UI should
+// request it when the security settings are opened, not on every render.
+func (a *App) GetKDFParams() KDFParamsDTO {
+	if a.vault == nil {
+		return KDFParamsDTO{Err: errVaultUnavailable.Error()}
+	}
+	cur, err := a.vault.KDFParams()
+	if err != nil {
+		return KDFParamsDTO{Err: err.Error()}
+	}
+	sug := lv_crypto.CalibrateKDFParams(lv_crypto.DefaultCalibrationTarget)
+	return KDFParamsDTO{
+		Time: cur.Time, MemoryKiB: cur.MemoryKiB, Threads: cur.Threads,
+		SuggestedTime: sug.Time, SuggestedMem: sug.MemoryKiB,
+		// Only offer an upgrade that is a genuine increase, and only in memory or time —
+		// never a decrease, which RekeyKDF would refuse anyway.
+		CanStrengthen: sug.MemoryKiB > cur.MemoryKiB || sug.Time > cur.Time,
+	}
+}
+
+// StrengthenKDF re-derives the master-password KEK under calibrated parameters and
+// re-wraps the DEK. No secret is re-encrypted — only the wrapping changes — so existing
+// audit MACs and the recovery key both keep working. Requires the master password.
+func (a *App) StrengthenKDF(password string) BoolResult {
+	if a.vault == nil {
+		return BoolResult{Err: errVaultUnavailable.Error()}
+	}
+	cur, err := a.vault.KDFParams()
+	if err != nil {
+		return BoolResult{Err: err.Error()}
+	}
+	sug := lv_crypto.CalibrateKDFParams(lv_crypto.DefaultCalibrationTarget)
+	// Never move a dimension downward: take the max of current and suggested.
+	if sug.Time < cur.Time {
+		sug.Time = cur.Time
+	}
+	if sug.MemoryKiB < cur.MemoryKiB {
+		sug.MemoryKiB = cur.MemoryKiB
+	}
+	if sug == cur {
+		return BoolResult{Err: "this machine does not support stronger parameters than the vault already uses"}
+	}
+	return fail(a.vault.RekeyKDF([]byte(password), sug))
 }
 
 func (a *App) Unlock(password string) BoolResult {
@@ -185,20 +266,30 @@ func (a *App) Lock() {
 }
 
 // HasRecoveryKey reports whether a recovery key is configured (used to show/hide the
-// "recover with key" option on the unlock screen).
-func (a *App) HasRecoveryKey() bool {
+// "recover with key" option on the unlock screen). A swallowed error here would hide the
+// recovery option from someone who actually has a key — locking them out of their own
+// vault — so the error is surfaced instead.
+func (a *App) HasRecoveryKey() BoolQueryDTO {
 	if a.vault == nil {
-		return false
+		return BoolQueryDTO{Err: errVaultUnavailable.Error()}
 	}
-	has, _ := a.vault.HasRecoveryKey()
-	return has
+	has, err := a.vault.HasRecoveryKey()
+	if err != nil {
+		return BoolQueryDTO{Err: err.Error()}
+	}
+	return BoolQueryDTO{Value: has}
 }
 
 // GenerateRecoveryKey creates (or replaces) the recovery key and returns the code ONCE.
-// Requires the vault to be unlocked.
-func (a *App) GenerateRecoveryKey() (string, error) {
+// Requires the vault to be unlocked AND the master password to be re-entered: a recovery
+// key is a permanent second door into the vault that survives every future password
+// change, so an unattended unlocked window must not be enough to mint one.
+func (a *App) GenerateRecoveryKey(password string) (string, error) {
 	if a.vault == nil {
 		return "", errVaultUnavailable
+	}
+	if err := a.vault.VerifyPassword([]byte(password)); err != nil {
+		return "", err
 	}
 	return a.vault.GenerateRecoveryKey()
 }
@@ -229,9 +320,19 @@ type SecretSummaryDTO struct {
 	CustomFields string   `json:"customFields"`
 }
 
-func (a *App) ListSecrets(search, provider, env string, includeArchived bool) []SecretSummaryDTO {
+// SecretListDTO is a listing plus the outcome of producing it. Items and Err are
+// distinct on purpose: the previous signature returned a nil slice on any error, which
+// rendered as "you have no secrets" — the single most alarming false statement a vault
+// can make. An empty Items with an empty Err means genuinely empty; an empty Items with
+// Err set means unknown.
+type SecretListDTO struct {
+	Items []SecretSummaryDTO `json:"items"`
+	Err   string             `json:"err,omitempty"`
+}
+
+func (a *App) ListSecrets(search, provider, env string, includeArchived bool) SecretListDTO {
 	if a.vault == nil {
-		return nil
+		return SecretListDTO{Items: []SecretSummaryDTO{}, Err: errVaultUnavailable.Error()}
 	}
 	summaries, err := a.vault.ListNames(lv_vault.ListFilter{
 		Search:          search,
@@ -240,7 +341,7 @@ func (a *App) ListSecrets(search, provider, env string, includeArchived bool) []
 		IncludeArchived: includeArchived,
 	})
 	if err != nil {
-		return nil
+		return SecretListDTO{Items: []SecretSummaryDTO{}, Err: err.Error()}
 	}
 	out := make([]SecretSummaryDTO, len(summaries))
 	for i, s := range summaries {
@@ -256,7 +357,7 @@ func (a *App) ListSecrets(search, provider, env string, includeArchived bool) []
 			IsFavorite: s.IsFavorite, HasTOTP: s.HasTOTP, CustomFields: s.CustomFields,
 		}
 	}
-	return out
+	return SecretListDTO{Items: out}
 }
 
 func (a *App) RevealSecret(alias string) (string, error) {
@@ -485,18 +586,29 @@ func (a *App) GetAuditLog(limit int) ([]AuditDTO, error) {
 	return out, nil
 }
 
+// VerifyAuditChain returns the seq of the first tampered audit record, or 0 when the
+// log is intact. On an unlocked vault this is the full keyed check (per-record HMACs
+// plus the anchored head); on a locked vault it degrades to the hash-chain walk, which
+// still catches corruption but not a determined attacker.
 func (a *App) VerifyAuditChain() (int64, error) {
 	if a.vault == nil {
 		return 0, errVaultUnavailable
 	}
-	return lv_audit.VerifyChain(a.vault.DB().SQL())
+	return a.vault.VerifyAuditChain()
 }
 
-func (a *App) ExportBackup(password string) ([]byte, error) {
+// ExportBackup writes an encrypted portable backup. masterPassword re-authenticates the
+// operator (an export is a full copy of the vault leaving the machine, so an unattended
+// unlocked window must not be enough); backupPassword is the passphrase the backup file
+// itself is sealed under and may differ.
+func (a *App) ExportBackup(masterPassword, backupPassword string) ([]byte, error) {
 	if a.vault == nil {
 		return nil, errVaultUnavailable
 	}
-	return lv_backup.Export(a.vault.DB().SQL(), []byte(password))
+	if err := a.vault.VerifyPassword([]byte(masterPassword)); err != nil {
+		return nil, err
+	}
+	return lv_backup.Export(a.vault.DB().SQL(), []byte(backupPassword))
 }
 
 func (a *App) ImportBackup(data []byte, password string) BoolResult {
@@ -582,6 +694,11 @@ func (a *App) DeleteProvider(key string) BoolResult {
 	return fail(err)
 }
 
+// ResetVault destroys the vault database. Deliberately NOT gated on the master password:
+// the primary legitimate caller is "I forgot my password and have no recovery key", where
+// by definition the password cannot be supplied. It is destructive-only — it cannot
+// exfiltrate plaintext — so the residual risk is availability, which a backup covers.
+// The UI must keep its typed-confirmation prompt in front of this.
 func (a *App) ResetVault() BoolResult {
 	if a.vault != nil {
 		a.vault.Close()
@@ -600,6 +717,11 @@ func (a *App) ResetVault() BoolResult {
 	return BoolResult{OK: true}
 }
 
+// GetSetting returns the empty string for a missing key OR a failed read. That
+// conflation is deliberate and safe here, unlike the cases above: every caller supplies
+// its own default (theme, auto-lock seconds, clipboard timeout), and the backend never
+// trusts these values for a security decision — autoLockSeconds re-reads and validates
+// independently, falling back to 300s rather than to 0.
 func (a *App) GetSetting(key string) string {
 	if a.vault == nil {
 		return ""

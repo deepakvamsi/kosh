@@ -42,7 +42,8 @@ export default function SecretsView() {
         api.listSecrets(search, filterProv, filterEnv, includeArchived),
         api.listProviders(),
       ])
-      setSecrets(s ?? [])
+      // An empty list because the read failed is not an empty vault; surface it.
+      if (s.err) { setLoadErr(s.err); setSecrets([]) } else { setSecrets(s.items) }
       setProviders(p ?? [])
     } catch (e: any) {
       setLoadErr(String(e?.message ?? e))

@@ -244,7 +244,7 @@ func (v *Vault) MoveToFolder(alias string, folderID *int64) error {
 	if n == 0 {
 		return ErrNotFound
 	}
-	if err := audit.LogTx(tx, v.actor, "move_folder", alias, audit.Allow, ""); err != nil {
+	if err := v.logAuditTx(tx, "move_folder", alias, audit.Allow, ""); err != nil {
 		return fmt.Errorf("vault: audit move_folder: %w", err)
 	}
 	return tx.Commit()
@@ -277,7 +277,7 @@ func (v *Vault) ArchiveSecret(alias string, archived bool) error {
 	if !archived {
 		action = "unarchive"
 	}
-	if err := audit.LogTx(tx, v.actor, action, alias, audit.Allow, ""); err != nil {
+	if err := v.logAuditTx(tx, action, alias, audit.Allow, ""); err != nil {
 		return fmt.Errorf("vault: audit %s: %w", action, err)
 	}
 	return tx.Commit()
@@ -326,7 +326,7 @@ func (v *Vault) SetCustomFields(alias, jsonFields string) error {
 	if n == 0 {
 		return ErrNotFound
 	}
-	if err := audit.LogTx(tx, v.actor, "set_custom_fields", alias, audit.Allow, ""); err != nil {
+	if err := v.logAuditTx(tx, "set_custom_fields", alias, audit.Allow, ""); err != nil {
 		return fmt.Errorf("vault: audit set_custom_fields: %w", err)
 	}
 	return tx.Commit()

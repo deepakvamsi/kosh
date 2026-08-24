@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"time"
 
+	"kosh/internal/audit"
 	"kosh/internal/crypto"
 )
 
@@ -363,6 +364,28 @@ func restore(db *sql.DB, snap VaultSnapshot) error {
 		snap.Meta.CreatedAt, time.Now().Unix(),
 	); err != nil {
 		return fmt.Errorf("backup: restore vault_meta: %w", err)
+	}
+
+	// A restore installs the ARCHIVE's key material, so the DEK — and with it the audit
+	// MAC subkey — changes. Every record MAC in the existing log was computed under a
+	// key that no longer exists, and the stored head anchor belongs to the replaced
+	// vault. Left alone, the next unlock would report the whole log as tampered.
+	//
+	// The records themselves are kept (deleting audit history to silence a warning is
+	// exactly backwards) but downgraded to chain-only, and the anchor is cleared. The
+	// next keyed append re-anchors, so post-restore activity is fully authenticated
+	// while pre-restore history remains readable and hash-linked.
+	if _, err := tx.Exec(`UPDATE audit_log SET mac=NULL WHERE mac IS NOT NULL`); err != nil {
+		return fmt.Errorf("backup: reset audit macs: %w", err)
+	}
+	if _, err := tx.Exec(`UPDATE vault_meta SET audit_head_seq=NULL, audit_head_mac=NULL WHERE id=1`); err != nil {
+		return fmt.Errorf("backup: clear audit anchor: %w", err)
+	}
+	// Record the restore itself. It is chain-only by necessity: the new DEK is not in
+	// memory here, and the operation is precisely the kind of thing an audit log exists
+	// to remember.
+	if err := audit.LogTx(tx, "ui", "import_backup", "", audit.Allow, "vault replaced from archive"); err != nil {
+		return fmt.Errorf("backup: audit restore: %w", err)
 	}
 
 	// Replace all organisational state and secrets wholesale so the restore mirrors the

@@ -1,0 +1,41 @@
+# Normalise line endings in the repository.
+#
+# Without this, core.autocrlf=true gives Windows contributors CRLF working copies while
+# the index holds LF. `gofmt -l` then flags those files locally but not in CI, which
+# makes a formatting gate look broken and hides the real issues among the noise.
+# Declaring the intent explicitly means every checkout agrees.
+
+# Default: let Git normalise text files to LF in the index.
+* text=auto eol=lf
+
+# Source and config: always LF, on every platform.
+*.go     text eol=lf
+*.sql    text eol=lf
+*.ts     text eol=lf
+*.tsx    text eol=lf
+*.js     text eol=lf
+*.json   text eol=lf
+*.css    text eol=lf
+*.html   text eol=lf
+*.md     text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.sh     text eol=lf
+*.mod    text eol=lf
+*.sum    text eol=lf
+
+# Windows-native tooling expects CRLF.
+*.ps1    text eol=crlf
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
+*.nsi    text eol=crlf
+
+# Binary: never touch.
+*.png    binary
+*.ico    binary
+*.icns   binary
+*.pfx    binary
+*.p12    binary
+*.xlsx   binary
+*.deb    binary
+*.exe    binary

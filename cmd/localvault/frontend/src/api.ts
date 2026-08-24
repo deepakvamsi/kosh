@@ -1,21 +1,21 @@
-import { BoolResult, IDResult, SecretSummary, RevealedItem, HealthItem, AuditEntry, Provider, AddSecretInput, ImportPreviewResult, ImportCommitResult, AddProviderInput } from './types'
+import { BoolResult, BoolQuery, SecretList, KdfParams, IDResult, SecretSummary, RevealedItem, HealthItem, AuditEntry, Provider, AddSecretInput, ImportPreviewResult, ImportCommitResult, AddProviderInput } from './types'
 
 declare global {
   interface Window {
     go: {
       main: {
         App: {
-          IsInitialized(): Promise<boolean>
+          IsInitialized(): Promise<BoolQuery>
           IsUnlocked(): Promise<boolean>
           InitVault(password: string): Promise<BoolResult>
           Unlock(password: string): Promise<BoolResult>
           UnlockStatus(): Promise<number>
           Lock(): Promise<void>
           Touch(): Promise<void>
-          HasRecoveryKey(): Promise<boolean>
-          GenerateRecoveryKey(): Promise<string>
+          HasRecoveryKey(): Promise<BoolQuery>
+          GenerateRecoveryKey(password: string): Promise<string>
           RecoverWithKey(recoveryCode: string, newPassword: string): Promise<BoolResult>
-          ListSecrets(search: string, provider: string, env: string, includeArchived: boolean): Promise<SecretSummary[]>
+          ListSecrets(search: string, provider: string, env: string, includeArchived: boolean): Promise<SecretList>
           RevealSecret(alias: string): Promise<string>
           RevealItem(alias: string): Promise<RevealedItem>
           AddSecret(input: AddSecretInput): Promise<IDResult>
@@ -31,13 +31,15 @@ declare global {
           GetHealth(): Promise<HealthItem[]>
           GetAuditLog(limit: number): Promise<AuditEntry[]>
           VerifyAuditChain(): Promise<number>
-          ExportBackup(password: string): Promise<Uint8Array>
+          ExportBackup(masterPassword: string, backupPassword: string): Promise<Uint8Array>
           ImportBackup(data: number[], password: string): Promise<BoolResult>
           ListProviders(): Promise<Provider[]>
           AddProvider(input: AddProviderInput): Promise<BoolResult>
           DeleteProvider(key: string): Promise<BoolResult>
           GetSetting(key: string): Promise<string>
           SetSetting(key: string, value: string): Promise<BoolResult>
+          GetKDFParams(): Promise<KdfParams>
+          StrengthenKDF(password: string): Promise<BoolResult>
           GetVaultPath(): Promise<string>
           GetVersion(): Promise<string>
           ResetVault(): Promise<BoolResult>
@@ -61,7 +63,7 @@ export const api = {
   touch:         ()                          => go().Touch(),
 
   hasRecoveryKey:      ()                              => go().HasRecoveryKey(),
-  generateRecoveryKey: ()                              => go().GenerateRecoveryKey(),
+  generateRecoveryKey: (pw: string)                    => go().GenerateRecoveryKey(pw),
   recoverWithKey:      (code: string, newPw: string)   => go().RecoverWithKey(code, newPw),
 
   listSecrets:   (search='', provider='', env='', includeArchived=false) =>
@@ -85,7 +87,7 @@ export const api = {
   getAuditLog:   (n=200)                     => go().GetAuditLog(n),
   verifyChain:   ()                          => go().VerifyAuditChain(),
 
-  exportBackup:  (pw: string)                => go().ExportBackup(pw),
+  exportBackup:  (masterPw: string, backupPw: string) => go().ExportBackup(masterPw, backupPw),
   importBackup:  (data: number[], pw: string)=> go().ImportBackup(data, pw),
 
   listProviders: ()                          => go().ListProviders(),
@@ -93,6 +95,8 @@ export const api = {
   deleteProvider:(key: string)               => go().DeleteProvider(key),
   getSetting:    (key: string)               => go().GetSetting(key),
   setSetting:    (key: string, val: string)  => go().SetSetting(key, val),
+  getKdfParams:  ()                          => go().GetKDFParams(),
+  strengthenKdf: (pw: string)                => go().StrengthenKDF(pw),
   getVaultPath:  ()                          => go().GetVaultPath(),
   getVersion:    ()                          => go().GetVersion(),
   resetVault:    ()                          => go().ResetVault(),

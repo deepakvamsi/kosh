@@ -40,6 +40,9 @@ Stores the vault's key material. No plaintext master password is ever stored.
 | `kdf_time` | INTEGER | Argon2id time cost |
 | `kdf_memory_kib` | INTEGER | Argon2id memory cost in KiB |
 | `kdf_threads` | INTEGER | Argon2id parallelism |
+| `recovery_kdf_time` | INTEGER | Argon2id time cost for the RECOVERY key; NULL on pre-`0009` vaults (falls back to `kdf_time`) |
+| `recovery_kdf_memory_kib` | INTEGER | Recovery-key memory cost in KiB; NULL pre-`0009` |
+| `recovery_kdf_threads` | INTEGER | Recovery-key parallelism; NULL pre-`0009` |
 | `kdf_salt` | BLOB | 16-byte random per-vault salt |
 | `verifier` | BLOB | Proof token used to check the master password without exposing the DEK |
 | `dek_wrapped` | BLOB | DEK encrypted under the KEK (Argon2id of master password) |
@@ -136,7 +139,22 @@ overwrites in place and keeps no superseded copies.
 
 ### `audit_log` — append-only, tamper-evident
 
-Every sensitive operation is written here. The hash chain makes any after-the-fact deletion or editing detectable.
+Every sensitive operation is written here.
+
+The hash chain alone only detects ACCIDENTAL damage: it involves no secret, so anyone
+able to write to `vault.db` could edit a row and recompute every hash after it. Two
+keyed additions (migration `0008`) close that gap:
+
+- `mac` authenticates each record under a subkey derived from the DEK, so it exists only
+  in memory and only after a correct master password.
+- `vault_meta.audit_head_seq` / `audit_head_mac` anchor the newest keyed record, which is
+  what makes truncating the tail detectable.
+
+`mac` is legitimately NULL for events logged while the vault was LOCKED (failed unlock,
+lockout) — no key exists at that moment — and for rows predating migration `0008`. Those
+rows are verified chain-only. A restore (`backup.Import`) installs the archive's key
+material, so it clears every `mac` and the anchor: the DEK changes, the old MACs are no
+longer verifiable, and the next keyed append re-anchors.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -149,6 +167,7 @@ Every sensitive operation is written here. The hash chain makes any after-the-fa
 | `detail` | TEXT | Freeform context (e.g. `"wrong password"`) |
 | `prev_hash` | BLOB | SHA-256 of the previous row's `hash` field |
 | `hash` | BLOB | `SHA-256(prev_hash ‖ canonical(record))` — the chain link |
+| `mac` | BLOB | `HMAC-SHA256(audit-subkey, hash)`; NULL when written while locked or pre-`0008` |
 
 ---
 
