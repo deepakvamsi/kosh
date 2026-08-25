@@ -232,6 +232,12 @@ export default function SecretsView() {
                   {revealed?.alias === s.alias && (
                     <tr className="bg-[rgb(var(--accent)/0.05)]">
                       <td colSpan={6} className="px-4 py-2">
+                        {s.description && (
+                          <p className="mb-2 flex items-start gap-1.5 text-xs text-[rgb(var(--text-muted))]">
+                            <FileText className="mt-0.5 h-3 w-3 shrink-0" />
+                            <span className="select-text whitespace-pre-wrap break-words">{s.description}</span>
+                          </p>
+                        )}
                         <RevealedFields item={revealed.item} onCopy={copyValue} copied={copied} />
                         <TOTPPanel alias={s.alias} hasTOTP={s.hasTOTP} onChanged={load} />
                         <CustomFieldsPanel

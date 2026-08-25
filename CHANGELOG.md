@@ -9,6 +9,15 @@ was before — a security note that only describes the fix is not auditable.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-08-24
+
+### Fixed
+
+- **A secret's description is now shown when the entry is revealed.** The description
+  (non-secret metadata) was captured in the Add form and stored, but no view ever
+  rendered it — it appeared nowhere in the UI. It now shows at the top of the expanded
+  reveal panel when present.
+
 ## [0.4.0] - 2026-08-24
 
 ### Security
