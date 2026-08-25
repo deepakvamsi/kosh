@@ -9,6 +9,17 @@ was before — a security note that only describes the fix is not auditable.
 
 ## [Unreleased]
 
+### Changed
+
+- **Bumped `modernc.org/sqlite` 1.30.1 → 1.57.0** (and its `modernc.org/libc`,
+  `memory`, `mathutil`, `strutil` deps). The old driver tripped Go's race detector
+  inside its own internals on the Linux CI runner, failing `go test -race` there while
+  macOS `-race`, Windows, and the whole suite without `-race` all passed — i.e. a
+  detector finding in a dependency, not a concurrency bug in Kosh (the shipped binary
+  is CGO-free and never runs the instrumented build). The newer driver clears it and
+  keeps full race coverage on Linux. CI also gained `-timeout=30m` on the `-race` step,
+  since the Argon2id-heavy suite is legitimately slow under the detector.
+
 ## [0.4.1] - 2026-08-24
 
 ### Fixed
