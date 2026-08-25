@@ -76,12 +76,19 @@ jobs:
       # toolchain. Linux/macOS runners ship one; the Windows runner does not, so it
       # runs the suite without the race detector rather than installing a compiler
       # the shipped binary never uses.
+      #
+      # -timeout=30m (default is 10m/package): the crypto suite calibrates Argon2id by
+      # timing real derivations at up to 512 MiB, and the vault suite runs Argon2id on
+      # every Init/Unlock. The race detector instruments every memory access, so a
+      # memory-hard KDF runs many times slower under -race; on a slow/noisy runner the
+      # default 10m was occasionally exceeded, failing an identical binary that passed
+      # elsewhere. The larger budget removes that timing flake without touching coverage.
       - name: go test -race (includes the network air-seal guard)
         if: runner.os != 'Windows'
         env: { CGO_ENABLED: '1' }
         run: |
-          go test -race ./...
-          cd cmd/localvault && go test -race ./...
+          go test -race -timeout=30m ./...
+          cd cmd/localvault && go test -race -timeout=30m ./...
       - name: go test (includes the network air-seal guard)
         if: runner.os == 'Windows'
         run: |
