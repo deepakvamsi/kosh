@@ -107,7 +107,7 @@ jobs:
         shell: bash
         working-directory: dist-artifacts
         run: sha256sum * > SHA256SUMS-windows.txt
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: dist-artifacts/*
 
@@ -158,6 +158,6 @@ jobs:
       - name: Checksums
         working-directory: dist-artifacts
         run: sha256sum * > SHA256SUMS-linux.txt
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: dist-artifacts/*
