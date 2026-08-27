@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, Fragment } from 'react'
 import { api } from '../api'
-import { SecretSummary, AddSecretInput, Provider, RevealedItem, ItemType } from '../types'
-import { Plus, Search, Eye, EyeOff, Copy, Trash2, Archive, RotateCcw, KeyRound, Link2, User, FileText, Star } from 'lucide-react'
+import { SecretSummary, AddSecretInput, UpdateSecretInput, Provider, RevealedItem, ItemType } from '../types'
+import { Plus, Search, Eye, EyeOff, Copy, Trash2, Archive, RotateCcw, KeyRound, Link2, User, FileText, Star, Pencil } from 'lucide-react'
 import CustomFieldsPanel from '../components/CustomFieldsPanel'
 import StrengthBar from '../components/StrengthBar'
 import TOTPPanel from '../components/TOTPPanel'
@@ -32,6 +32,7 @@ export default function SecretsView() {
   const [includeArchived, setIncludeArchived] = useState(false)
   const [revealed, setRevealed] = useState<RevealState | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const [editing, setEditing] = useState<SecretSummary | null>(null)
   const [copied, setCopied] = useState('')
   const [loadErr, setLoadErr] = useState('')
 
@@ -218,6 +219,10 @@ export default function SecretsView() {
                           className={`rounded p-1.5 hover:bg-white/10 transition-colors ${copied === s.alias ? 'text-[rgb(var(--success))]' : 'text-[rgb(var(--text-muted))] hover:text-[rgb(var(--text))]'}`}>
                           <Copy className="h-3.5 w-3.5" />
                         </button>
+                        <button onClick={() => setEditing(s)} title="Edit (description / rotate value)"
+                          className="rounded p-1.5 text-[rgb(var(--text-muted))] hover:bg-white/10 hover:text-[rgb(var(--text))]">
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
                         <button onClick={() => handleArchive(s.alias, !s.isArchived)} title={s.isArchived ? 'Unarchive' : 'Archive'}
                           className="rounded p-1.5 text-[rgb(var(--text-muted))] hover:bg-white/10 hover:text-[rgb(var(--text))]">
                           {s.isArchived ? <RotateCcw className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
@@ -258,6 +263,10 @@ export default function SecretsView() {
 
       {addOpen && (
         <AddModal providers={providers} onClose={() => setAddOpen(false)} onSaved={load} />
+      )}
+
+      {editing && (
+        <EditModal secret={editing} onClose={() => setEditing(null)} onSaved={load} />
       )}
     </div>
   )
@@ -475,6 +484,118 @@ function AddModal({ providers, onClose, onSaved }: { providers: Provider[]; onCl
             <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-[rgb(var(--border))] py-2.5 text-sm hover:bg-white/5">Cancel</button>
             <button type="submit" disabled={loading} className="flex-1 rounded-lg bg-[rgb(var(--accent))] py-2.5 text-sm font-medium text-white hover:bg-[rgb(var(--accent-hover))] disabled:opacity-50">
               {loading ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// EditModal changes an existing secret's description and, optionally, its value. Name,
+// provider and environment are fixed (they are bound into the ciphertext), so only the
+// description and the type-specific value fields are editable. Value fields start blank:
+// leaving them blank keeps the current value; filling the full set for the item's type
+// rotates it. The current value is never pre-filled — the user re-enters it to change it.
+function EditModal({ secret, onClose, onSaved }: { secret: SecretSummary; onClose: () => void; onSaved: () => void }) {
+  const mode = secret.itemType
+  const [description, setDescription] = useState(secret.description ?? '')
+  const [value, setValue] = useState('')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [note, setNote] = useState('')
+  const [accessKey, setAccessKey] = useState('')
+  const [secretKey, setSecretKey] = useState('')
+  const [show, setShow] = useState(false)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const inputCls = 'rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--bg))] px-3 py-2 text-sm text-[rgb(var(--text))] outline-none focus:border-[rgb(var(--accent))]'
+  const labelCls = 'flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]'
+  const eyeBtn = 'absolute right-2 top-1/2 -translate-y-1/2 text-[rgb(var(--text-muted))]'
+  const ph = 'leave blank to keep current'
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      const input: UpdateSecretInput = { alias: secret.alias, description, value, username, password, note, accessKey, secretKey }
+      const res = await api.updateSecret(input)
+      if (res.err) setError(res.err)
+      else { onSaved(); onClose() }
+    } catch (e: any) { setError(String(e)) }
+    finally { setLoading(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] p-6 shadow-2xl">
+        <h2 className="mb-1 text-base font-semibold">Edit secret</h2>
+        <p className="mb-4 font-mono text-xs text-[rgb(var(--text-muted))]">{secret.alias}</p>
+
+        <form onSubmit={submit} className="flex flex-col gap-3">
+          {mode === 'api_key' && (
+            <label className={labelCls}>
+              New secret value
+              <div className="relative">
+                <input type={show ? 'text' : 'password'} value={value} onChange={e => setValue(e.target.value)} placeholder={ph} className={`w-full pr-10 ${inputCls}`} />
+                <button type="button" onClick={() => setShow(v => !v)} className={eyeBtn}>{show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+              </div>
+            </label>
+          )}
+
+          {mode === 'login' && (
+            <>
+              <label className={labelCls}>
+                New username
+                <input value={username} onChange={e => setUsername(e.target.value)} placeholder={ph} autoComplete="off" className={inputCls} />
+              </label>
+              <label className={labelCls}>
+                New password
+                <div className="relative">
+                  <input type={show ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder={ph} autoComplete="new-password" className={`w-full pr-10 ${inputCls}`} />
+                  <button type="button" onClick={() => setShow(v => !v)} className={eyeBtn}>{show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+                </div>
+              </label>
+              <p className="text-[11px] text-[rgb(var(--text-muted))]">To change the login, fill both fields; leave both blank to keep it.</p>
+            </>
+          )}
+
+          {mode === 'keypair' && (
+            <>
+              <label className={labelCls}>
+                New access key
+                <div className="relative">
+                  <input type={show ? 'text' : 'password'} value={accessKey} onChange={e => setAccessKey(e.target.value)} placeholder={ph} className={`w-full pr-10 font-mono ${inputCls}`} />
+                  <button type="button" onClick={() => setShow(v => !v)} className={eyeBtn}>{show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+                </div>
+              </label>
+              <label className={labelCls}>
+                New secret key
+                <input type={show ? 'text' : 'password'} value={secretKey} onChange={e => setSecretKey(e.target.value)} placeholder={ph} className={`font-mono ${inputCls}`} />
+              </label>
+              <p className="text-[11px] text-[rgb(var(--text-muted))]">To rotate the pair, fill both fields; leave both blank to keep it.</p>
+            </>
+          )}
+
+          {mode === 'secure_note' && (
+            <label className={labelCls}>
+              New note
+              <textarea value={note} onChange={e => setNote(e.target.value)} rows={5} placeholder={ph} className={`resize-y ${inputCls}`} />
+            </label>
+          )}
+
+          <label className={labelCls}>
+            Description
+            <input value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional — shown when you expand the secret" className={inputCls} />
+          </label>
+
+          {error && <p className="text-xs text-[rgb(var(--danger))]">{error}</p>}
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-[rgb(var(--border))] py-2.5 text-sm hover:bg-white/5">Cancel</button>
+            <button type="submit" disabled={loading} className="flex-1 rounded-lg bg-[rgb(var(--accent))] py-2.5 text-sm font-medium text-white hover:bg-[rgb(var(--accent-hover))] disabled:opacity-50">
+              {loading ? 'Saving…' : 'Save changes'}
             </button>
           </div>
         </form>

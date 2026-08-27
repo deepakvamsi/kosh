@@ -104,6 +104,20 @@ export type AddSecretInput = {
   rotationDays?: number | null
 }
 
+// UpdateSecretInput edits an existing secret. Description is always applied. The
+// type-specific value fields are optional — leave them empty to keep the current value,
+// or supply the full set for the item's type to rotate it.
+export type UpdateSecretInput = {
+  alias: string
+  description: string
+  value?: string     // api_key
+  username?: string  // login
+  password?: string  // login
+  note?: string      // secure_note
+  accessKey?: string // keypair
+  secretKey?: string // keypair
+}
+
 export type ColMapDTO = {
   alias: number
   value: number

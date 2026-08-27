@@ -458,6 +458,36 @@ func (a *App) UpdateSecretValue(alias, newValue string) BoolResult {
 	return fail(a.vault.UpdateValue(alias, []byte(newValue)))
 }
 
+// UpdateSecretInput edits an existing secret. Description is always applied; the
+// type-specific value fields are optional — leave them empty to keep the current value,
+// or supply the full set for the item's type to rotate it. Alias/provider/environment
+// are immutable (bound into the ciphertext's associated data).
+type UpdateSecretInput struct {
+	Alias       string `json:"alias"`
+	Description string `json:"description"`
+	Value       string `json:"value"`     // api_key
+	Username    string `json:"username"`  // login
+	Password    string `json:"password"`  // login
+	Note        string `json:"note"`      // secure_note
+	AccessKey   string `json:"accessKey"` // keypair
+	SecretKey   string `json:"secretKey"` // keypair
+}
+
+func (a *App) UpdateSecret(in UpdateSecretInput) BoolResult {
+	if a.vault == nil {
+		return BoolResult{Err: errVaultUnavailable.Error()}
+	}
+	return fail(a.vault.UpdateSecret(in.Alias, lv_vault.SecretUpdate{
+		Description: in.Description,
+		Value:       []byte(in.Value),
+		Username:    in.Username,
+		Password:    in.Password,
+		Note:        in.Note,
+		AccessKey:   in.AccessKey,
+		SecretKey:   in.SecretKey,
+	}))
+}
+
 func (a *App) DeleteSecret(alias string) BoolResult {
 	if a.vault == nil {
 		return BoolResult{Err: errVaultUnavailable.Error()}
