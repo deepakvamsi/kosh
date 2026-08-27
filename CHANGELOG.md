@@ -9,16 +9,31 @@ was before — a security note that only describes the fix is not auditable.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-27
+
+### Added
+
+- **Edit an existing secret.** A pencil action on each row opens an editor that changes
+  the secret's **description** and, optionally, **rotates its value** (the type-specific
+  fields — value / username+password / access+secret key / note). Value fields start
+  blank: leaving them blank keeps the current value; filling the full set for the item's
+  type rotates it. Alias, provider and environment stay immutable because they are bound
+  into the ciphertext's associated data. Backed by `Vault.UpdateSecret` (type-aware
+  validation in the core) and the `UpdateSecret` binding; description and value commit
+  together under one audited `update` record. This also closes the gap where a secret
+  created without a description could never gain one — so the description shown on expand
+  (added in 0.4.1) can now be set after the fact.
+
 ### Changed
 
 - **Bumped `modernc.org/sqlite` 1.30.1 → 1.57.0** (and its `modernc.org/libc`,
-  `memory`, `mathutil`, `strutil` deps). The old driver tripped Go's race detector
-  inside its own internals on the Linux CI runner, failing `go test -race` there while
-  macOS `-race`, Windows, and the whole suite without `-race` all passed — i.e. a
-  detector finding in a dependency, not a concurrency bug in Kosh (the shipped binary
-  is CGO-free and never runs the instrumented build). The newer driver clears it and
-  keeps full race coverage on Linux. CI also gained `-timeout=30m` on the `-race` step,
-  since the Argon2id-heavy suite is legitimately slow under the detector.
+  `memory`, `mathutil`, `strutil` deps) — an overdue driver update that Dependabot had
+  flagged. CI also gained `-timeout=30m` on the `-race` step, since the Argon2id-heavy
+  suite is legitimately slow under the race detector. (An earlier ubuntu `go test -race`
+  failure that prompted these changes turned out to be a **transient GitHub-runner
+  issue** — it cleared on a no-op retry of the identical commit, and never reproduced in
+  faithful local Linux `-race` runs. Neither of these changes was the fix; both are kept
+  as genuine improvements. The shipped binary is CGO-free and never runs `-race`.)
 
 ## [0.4.1] - 2026-08-24
 

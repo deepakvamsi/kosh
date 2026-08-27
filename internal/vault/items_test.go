@@ -117,6 +117,49 @@ func TestKeyPairSecretsNeverStoredInPlaintextColumns(t *testing.T) {
 	}
 }
 
+func TestUpdateSecret(t *testing.T) {
+	v := newInitedVault(t)
+	if _, err := v.AddSecret(AddSecretInput{
+		Alias: "gh", ItemType: ItemLogin, ProviderKey: "github", Environment: Dev,
+		Username: "octocat", Password: "old-pw",
+	}); err != nil {
+		t.Fatalf("AddSecret: %v", err)
+	}
+
+	// Description-only edit: value must be untouched.
+	if err := v.UpdateSecret("gh", SecretUpdate{Description: "my main account"}); err != nil {
+		t.Fatalf("description-only UpdateSecret: %v", err)
+	}
+	r, _ := v.RevealItem("gh")
+	if r.Username != "octocat" || r.Password != "old-pw" {
+		t.Fatalf("description-only edit changed the value: %+v", r)
+	}
+	names, _ := v.ListNames(ListFilter{})
+	var desc string
+	for _, s := range names {
+		if s.Alias == "gh" {
+			desc = s.Description
+		}
+	}
+	if desc != "my main account" {
+		t.Fatalf("description not persisted: %q", desc)
+	}
+
+	// Value rotation together with a description change.
+	if err := v.UpdateSecret("gh", SecretUpdate{Description: "rotated", Username: "octocat", Password: "new-pw"}); err != nil {
+		t.Fatalf("value UpdateSecret: %v", err)
+	}
+	r, _ = v.RevealItem("gh")
+	if r.Password != "new-pw" || r.Username != "octocat" {
+		t.Fatalf("value not rotated: %+v", r)
+	}
+
+	// A partial value set for a login is rejected by the core (not silently half-applied).
+	if err := v.UpdateSecret("gh", SecretUpdate{Description: "x", Username: "only-user"}); err == nil {
+		t.Fatal("expected error for a login update missing the password")
+	}
+}
+
 func TestSecureNoteRoundTrip(t *testing.T) {
 	v := newInitedVault(t)
 	const body = "recovery phrase: correct horse battery staple"

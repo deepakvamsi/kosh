@@ -229,6 +229,105 @@ func (v *Vault) UpdateValue(alias string, newValue []byte) error {
 	return tx.Commit()
 }
 
+// SecretUpdate carries the editable fields for UpdateSecret. Description is always
+// applied. The value fields are type-specific and OPTIONAL: leave them all empty to keep
+// the current value, or supply the full set for the item's type to rotate it. Alias,
+// provider and environment are immutable here — they are bound into every value's
+// associated data, so changing them would require re-encryption and is out of scope.
+type SecretUpdate struct {
+	Description string
+	Value       []byte // api_key
+	Username    string // login
+	Password    string // login
+	Note        string // secure_note
+	AccessKey   string // keypair
+	SecretKey   string // keypair
+}
+
+// valueProvided reports whether the caller supplied new value material for the item's
+// type. An empty set means "description-only edit, keep the current value".
+func valueProvided(it ItemType, in SecretUpdate) bool {
+	switch it {
+	case ItemLogin:
+		return in.Username != "" || in.Password != ""
+	case ItemKeyPair:
+		return in.AccessKey != "" || in.SecretKey != ""
+	case ItemSecureNote:
+		return in.Note != ""
+	default: // ItemAPIKey
+		return len(in.Value) > 0
+	}
+}
+
+// UpdateSecret edits a secret's description and, when new value fields are supplied,
+// re-encrypts its value under the same associated data (the item type is fixed by the
+// stored row; type-aware validation runs in encodeItemPayload). Description and value are
+// committed together with a single audited "update" record. A description-only edit never
+// touches the ciphertext.
+func (v *Vault) UpdateSecret(alias string, in SecretUpdate) error {
+	dek, hm, err := v.dekCopy()
+	if err != nil {
+		return err
+	}
+	defer crypto.Zero(dek)
+	defer crypto.Zero(hm)
+	defer crypto.Zero(in.Value)
+
+	var (
+		id          int64
+		providerKey string
+		env         string
+		itemType    string
+	)
+	row := v.db.SQL().QueryRow(
+		`SELECT s.id, p.key, s.environment, s.item_type FROM secrets s JOIN providers p ON p.id=s.provider_id WHERE s.alias=?`, alias)
+	if err := row.Scan(&id, &providerKey, &env, &itemType); err == sql.ErrNoRows {
+		return ErrNotFound
+	} else if err != nil {
+		return err
+	}
+	it := ItemType(itemType).normalize()
+
+	var blob, valueHash []byte
+	changeValue := valueProvided(it, in)
+	if changeValue {
+		pt, encErr := encodeItemPayload(AddSecretInput{
+			ItemType: it, Value: in.Value, Username: in.Username, Password: in.Password,
+			Note: in.Note, AccessKey: in.AccessKey, SecretKey: in.SecretKey,
+		})
+		if encErr != nil {
+			return encErr
+		}
+		defer crypto.Zero(pt)
+		ad := v.associatedData(id, providerKey, Environment(env))
+		blob, err = crypto.Encrypt(dek, pt, ad)
+		if err != nil {
+			return err
+		}
+		valueHash = crypto.KeyedHash(hm, pt)
+	}
+
+	ts := time.Now().Unix()
+	tx, err := v.db.SQL().Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if changeValue {
+		if _, err := tx.Exec(`UPDATE secrets SET value_enc=?, value_hash=?, updated_at=? WHERE id=?`,
+			blob, valueHash, ts, id); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`UPDATE secrets SET description=?, updated_at=? WHERE id=?`, in.Description, ts, id); err != nil {
+		return err
+	}
+	if err := v.logAuditTx(tx, "update", alias, audit.Allow, ""); err != nil {
+		return fmt.Errorf("vault: audit update: %w", err)
+	}
+	return tx.Commit()
+}
+
 // DeleteSecret removes a secret by alias.
 func (v *Vault) DeleteSecret(alias string) error {
 	if !v.Unlocked() {
