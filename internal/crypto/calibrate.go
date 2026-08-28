@@ -119,6 +119,23 @@ func AtLeastAsStrong(a, b KDFParams) bool {
 	return b.Time >= a.Time && b.MemoryKiB >= a.MemoryKiB
 }
 
+// StrengthenWorthwhile reports whether re-keying from current to the freshly measured
+// suggested parameters is a genuine strengthening rather than calibration jitter.
+//
+// CalibrateKDFParams times real Argon2id derivations, so two calibrations on the same
+// machine differ by a few percent run to run. Comparing them for exact inequality (or a
+// tiny margin) makes "Strengthen" re-key pointlessly on noise: it reports success, moves
+// the cost by a MiB, and a follow-up calibration then says there is nothing to gain. A
+// re-key therefore requires a clear margin that swamps that jitter — more time passes, or
+// at least 25% more memory. Both the "can strengthen?" query and the action use this, so
+// they never disagree.
+func StrengthenWorthwhile(current, suggested KDFParams) bool {
+	if suggested.Time > current.Time {
+		return true
+	}
+	return suggested.MemoryKiB >= current.MemoryKiB+current.MemoryKiB/4
+}
+
 // ValidKDFParams reports whether p is inside the bounds calibration will ever produce.
 // Parameters arriving from outside (a hand-edited database, a bound API call) are checked
 // against this before use.

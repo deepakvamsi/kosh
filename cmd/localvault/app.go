@@ -211,9 +211,9 @@ func (a *App) GetKDFParams() KDFParamsDTO {
 	return KDFParamsDTO{
 		Time: cur.Time, MemoryKiB: cur.MemoryKiB, Threads: cur.Threads,
 		SuggestedTime: sug.Time, SuggestedMem: sug.MemoryKiB,
-		// Only offer an upgrade that is a genuine increase, and only in memory or time —
-		// never a decrease, which RekeyKDF would refuse anyway.
-		CanStrengthen: sug.MemoryKiB > cur.MemoryKiB || sug.Time > cur.Time,
+		// Only offer an upgrade that clears the jitter margin (see StrengthenWorthwhile),
+		// so the UI does not invite a pointless re-key that measurement noise would undo.
+		CanStrengthen: lv_crypto.StrengthenWorthwhile(cur, sug),
 	}
 }
 
@@ -229,15 +229,16 @@ func (a *App) StrengthenKDF(password string) BoolResult {
 		return BoolResult{Err: err.Error()}
 	}
 	sug := lv_crypto.CalibrateKDFParams(lv_crypto.DefaultCalibrationTarget)
+	// Only re-key for a meaningful gain — not calibration jitter (see StrengthenWorthwhile).
+	if !lv_crypto.StrengthenWorthwhile(cur, sug) {
+		return BoolResult{Err: "this machine does not support meaningfully stronger parameters than the vault already uses"}
+	}
 	// Never move a dimension downward: take the max of current and suggested.
 	if sug.Time < cur.Time {
 		sug.Time = cur.Time
 	}
 	if sug.MemoryKiB < cur.MemoryKiB {
 		sug.MemoryKiB = cur.MemoryKiB
-	}
-	if sug == cur {
-		return BoolResult{Err: "this machine does not support stronger parameters than the vault already uses"}
 	}
 	return fail(a.vault.RekeyKDF([]byte(password), sug))
 }
