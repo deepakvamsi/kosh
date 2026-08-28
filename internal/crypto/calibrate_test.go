@@ -89,6 +89,27 @@ func TestAtLeastAsStrong(t *testing.T) {
 	}
 }
 
+func TestStrengthenWorthwhile(t *testing.T) {
+	cur := KDFParams{Time: 3, MemoryKiB: 256 * 1024, Threads: 4}
+	cases := []struct {
+		name string
+		sug  KDFParams
+		want bool
+	}{
+		{"identical (jitter zero)", cur, false},
+		{"tiny memory jitter up", KDFParams{Time: 3, MemoryKiB: 256*1024 + 4*1024, Threads: 4}, false},
+		{"tiny memory jitter down", KDFParams{Time: 3, MemoryKiB: 256*1024 - 4*1024, Threads: 4}, false},
+		{"25% more memory", KDFParams{Time: 3, MemoryKiB: 320 * 1024, Threads: 4}, true},
+		{"more time", KDFParams{Time: 4, MemoryKiB: 256 * 1024, Threads: 4}, true},
+		{"less memory", KDFParams{Time: 3, MemoryKiB: 128 * 1024, Threads: 4}, false},
+	}
+	for _, tc := range cases {
+		if got := StrengthenWorthwhile(cur, tc.sug); got != tc.want {
+			t.Errorf("%s: StrengthenWorthwhile(%+v,%+v)=%v want %v", tc.name, cur, tc.sug, got, tc.want)
+		}
+	}
+}
+
 func TestValidKDFParams(t *testing.T) {
 	cases := []struct {
 		name string

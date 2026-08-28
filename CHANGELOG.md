@@ -9,6 +9,19 @@ was before — a security note that only describes the fix is not auditable.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-08-28
+
+### Fixed
+
+- **"Strengthen encryption" no longer re-keys on calibration jitter.** `StrengthenKDF`
+  re-keyed whenever a fresh calibration differed from the stored params at all — but
+  calibration times real Argon2id derivations and varies a few percent run to run, so a
+  second click could re-key for a one-MiB "gain" and then report there was nothing to
+  gain (flaky `TestStrengthenKDFRaisesCostAndKeepsSecretsReadable`). Both the
+  can-strengthen query and the action now require a clear margin (more time, or ≥25% more
+  memory) via `crypto.StrengthenWorthwhile`, so measurement noise never triggers a re-key
+  and the two never disagree.
+
 ## [0.5.0] - 2026-08-27
 
 ### Added
