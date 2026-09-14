@@ -1,11 +1,11 @@
 module kosh
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/xuri/excelize/v2 v2.11.0
 	golang.org/x/crypto v0.53.0
-	golang.org/x/sys v0.47.0
+	golang.org/x/sys v0.48.0
 	modernc.org/sqlite v1.57.0
 )
 
