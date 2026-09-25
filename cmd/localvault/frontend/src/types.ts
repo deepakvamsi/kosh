@@ -1,4 +1,4 @@
-export type ItemType = 'api_key' | 'login' | 'secure_note' | 'keypair'
+export type ItemType = 'api_key' | 'login' | 'secure_note' | 'keypair' | 'file'
 
 export type SecretSummary = {
   id: number
@@ -28,6 +28,8 @@ export type RevealedItem = {
   note: string      // secure_note
   accessKey: string // keypair
   secretKey: string // keypair
+  fileName: string  // file (metadata only)
+  fileSize: number  // file
   err?: string
 }
 
@@ -100,6 +102,8 @@ export type AddSecretInput = {
   note?: string      // secure_note
   accessKey?: string // keypair
   secretKey?: string // keypair
+  filePath?: string  // file: local path the backend reads + encrypts
+  fileName?: string  // file: original name
   expiresAt?: number | null
   rotationDays?: number | null
 }

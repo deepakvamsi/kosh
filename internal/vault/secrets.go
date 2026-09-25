@@ -25,6 +25,7 @@ type AddSecretInput struct {
 	Note         string // ItemSecureNote: free-form note body
 	AccessKey    string // ItemKeyPair: the access key (e.g. AWS access key id)
 	SecretKey    string // ItemKeyPair: the secret key
+	FileName     string // ItemFile: original filename (bytes go in Value)
 	TOTP         string // optional base32 TOTP seed (encrypted separately)
 	ExpiresAt    *int64
 	RotationDays *int
@@ -236,12 +237,13 @@ func (v *Vault) UpdateValue(alias string, newValue []byte) error {
 // associated data, so changing them would require re-encryption and is out of scope.
 type SecretUpdate struct {
 	Description string
-	Value       []byte // api_key
+	Value       []byte // api_key, or file bytes
 	Username    string // login
 	Password    string // login
 	Note        string // secure_note
 	AccessKey   string // keypair
 	SecretKey   string // keypair
+	FileName    string // file
 }
 
 // valueProvided reports whether the caller supplied new value material for the item's
@@ -254,6 +256,8 @@ func valueProvided(it ItemType, in SecretUpdate) bool {
 		return in.AccessKey != "" || in.SecretKey != ""
 	case ItemSecureNote:
 		return in.Note != ""
+	case ItemFile:
+		return len(in.Value) > 0
 	default: // ItemAPIKey
 		return len(in.Value) > 0
 	}
@@ -293,7 +297,7 @@ func (v *Vault) UpdateSecret(alias string, in SecretUpdate) error {
 	if changeValue {
 		pt, encErr := encodeItemPayload(AddSecretInput{
 			ItemType: it, Value: in.Value, Username: in.Username, Password: in.Password,
-			Note: in.Note, AccessKey: in.AccessKey, SecretKey: in.SecretKey,
+			Note: in.Note, AccessKey: in.AccessKey, SecretKey: in.SecretKey, FileName: in.FileName,
 		})
 		if encErr != nil {
 			return encErr

@@ -9,6 +9,38 @@ was before — a security note that only describes the fix is not auditable.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-25
+
+### Added
+
+- **Secret files — encrypted file storage.** A new `file` item type stores a file's bytes
+  encrypted inside `value_enc` (JSON `{name,data}`), exactly like every other secret: one
+  air-sealed store, included in encrypted backups, filename sealed inside the ciphertext
+  (never a plaintext column). Capped at 5 MB. **File bytes stay in the Go layer** — on add,
+  the backend reads the chosen path and encrypts; on retrieval, `SaveSecretFile` decrypts
+  and writes to a location you pick via a native save dialog. The bytes never pass through
+  the webview or clipboard. `RevealItem` returns file metadata only (name + size). Backed
+  by `Vault.RevealFile` and the encode/decode path in `internal/vault/items.go`.
+- **Broad built-in vendor list.** `seedProviders` now covers the common places software
+  teams hold credentials — cloud, operating systems, containers/IaC, CI/CD, version
+  control, package registries, databases, messaging, monitoring, comms, payments, auth,
+  AI/LLM, CDN, storage, search, analytics, dev tools, and cryptographic material
+  (SSH/GPG/TLS/Let's Encrypt). Additions are idempotent (`INSERT OR IGNORE`), so existing
+  vaults pick them up on next open without disturbing user-added providers.
+
+### Changed
+
+- **The Add form's type picker is a dropdown.** The four-icon tab row is replaced by a
+  single Type dropdown (API key · Login · Key pair · Secure note · Secret file); the form
+  fields swap to match the selection. This scales cleanly as more item types are added.
+- **`secrets.item_type` no longer carries a CHECK constraint (migration 0010).** Adding an
+  item type previously meant rebuilding the table to widen the CHECK. Validation is
+  authoritative in the Go layer (`vault.validItemType`), which every write already passes
+  through, so the column-level CHECK over non-secret metadata was redundant. Migration 0010
+  rebuilds `secrets` once (FK-safe, ciphertext copied verbatim) to drop it; future item
+  types need no schema change. Editing a `file` entry changes its description only — to
+  replace the file, delete and re-add.
+
 ## [0.5.1] - 2026-08-28
 
 ### Fixed

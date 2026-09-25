@@ -26,6 +26,17 @@ type keypairPayload struct {
 	SecretKey string `json:"secretKey"`
 }
 
+// filePayload is the canonical plaintext shape stored (encrypted) in value_enc for
+// ItemFile entries: the original filename and the raw file bytes. encoding/json marshals
+// Data as base64, so the whole thing is one JSON blob sealed like every other value. The
+// filename lives inside the ciphertext too — it is never written to a plaintext column.
+// File bytes stay in the Go layer; they are never handed to the UI (see RevealItem, which
+// returns only metadata, and RevealFile, used by the save-to-disk path).
+type filePayload struct {
+	Name string `json:"name"`
+	Data []byte `json:"data"`
+}
+
 // encodeItemPayload produces the plaintext bytes to encrypt for a given input, enforcing
 // type-aware validation in the core (not the UI). For ItemAPIKey it returns in.Value
 // directly (backward compatible with pre-item-type vaults); other types are encoded so
@@ -70,6 +81,19 @@ func encodeItemPayload(in AddSecretInput) ([]byte, error) {
 		}
 		return b, nil
 
+	case ItemFile:
+		if strings.TrimSpace(in.FileName) == "" {
+			return nil, fmt.Errorf("vault: file requires a name")
+		}
+		if len(in.Value) == 0 {
+			return nil, fmt.Errorf("vault: file requires contents")
+		}
+		b, err := json.Marshal(filePayload{Name: in.FileName, Data: in.Value})
+		if err != nil {
+			return nil, fmt.Errorf("vault: encode file: %w", err)
+		}
+		return b, nil
+
 	default:
 		return nil, fmt.Errorf("vault: invalid item type %q", in.ItemType)
 	}
@@ -86,6 +110,8 @@ type RevealedItem struct {
 	Note      string // ItemSecureNote
 	AccessKey string // ItemKeyPair
 	SecretKey string // ItemKeyPair
+	FileName  string // ItemFile: original filename (metadata only — never the bytes)
+	FileSize  int    // ItemFile: size of the stored file in bytes
 }
 
 // RevealItem decrypts an entry and returns it decoded per its stored item type, recording
@@ -119,10 +145,39 @@ func (v *Vault) RevealItem(alias string) (RevealedItem, error) {
 		}
 		out.AccessKey = kp.AccessKey
 		out.SecretKey = kp.SecretKey
+	case ItemFile:
+		var fp filePayload
+		if err := json.Unmarshal(pt, &fp); err != nil {
+			out.Value = string(pt)
+			return out, nil
+		}
+		// Metadata only — the file bytes never leave the Go layer via RevealItem.
+		out.FileName = fp.Name
+		out.FileSize = len(fp.Data)
+		crypto.Zero(fp.Data)
 	case ItemSecureNote:
 		out.Note = string(pt)
 	default:
 		out.Value = string(pt)
 	}
 	return out, nil
+}
+
+// RevealFile decrypts an ItemFile entry and returns its original filename and raw bytes,
+// for the save-to-disk path only. The caller must zeroize data promptly. The reveal is
+// audited exactly like RevealItem (via revealRaw). It errors if the entry is not a file.
+func (v *Vault) RevealFile(alias string) (name string, data []byte, err error) {
+	itemType, pt, err := v.revealRaw(alias)
+	if err != nil {
+		return "", nil, err
+	}
+	defer crypto.Zero(pt)
+	if itemType != ItemFile {
+		return "", nil, fmt.Errorf("vault: %q is not a file", alias)
+	}
+	var fp filePayload
+	if err := json.Unmarshal(pt, &fp); err != nil {
+		return "", nil, fmt.Errorf("vault: decode file: %w", err)
+	}
+	return fp.Name, fp.Data, nil
 }

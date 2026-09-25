@@ -117,6 +117,51 @@ func TestKeyPairSecretsNeverStoredInPlaintextColumns(t *testing.T) {
 	}
 }
 
+func TestFileRoundTrip(t *testing.T) {
+	v := newInitedVault(t)
+	content := []byte("-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----\n")
+	if _, err := v.AddSecret(AddSecretInput{
+		Alias: "prod-cert", ItemType: ItemFile, ProviderKey: "tls", Environment: Prod,
+		FileName: "server.crt", Value: append([]byte(nil), content...),
+	}); err != nil {
+		t.Fatalf("AddSecret file: %v", err)
+	}
+
+	// RevealItem exposes metadata only — never the bytes.
+	r, err := v.RevealItem("prod-cert")
+	if err != nil {
+		t.Fatalf("RevealItem: %v", err)
+	}
+	if r.ItemType != ItemFile || r.FileName != "server.crt" || r.FileSize != len(content) {
+		t.Fatalf("file metadata wrong: %+v", r)
+	}
+	if r.Value != "" {
+		t.Error("RevealItem must not return file bytes in Value")
+	}
+
+	// RevealFile returns the exact bytes for the save-to-disk path.
+	name, data, err := v.RevealFile("prod-cert")
+	if err != nil {
+		t.Fatalf("RevealFile: %v", err)
+	}
+	if name != "server.crt" || string(data) != string(content) {
+		t.Fatalf("file round trip failed: name=%q len=%d", name, len(data))
+	}
+
+	// RevealFile refuses non-file items.
+	v.AddSecret(AddSecretInput{Alias: "k", ProviderKey: "openai", Environment: Dev, Value: []byte("sk-x")})
+	if _, _, err := v.RevealFile("k"); err == nil {
+		t.Error("RevealFile should reject a non-file item")
+	}
+
+	// The plaintext filename and bytes live only inside value_enc.
+	var enc []byte
+	v.db.SQL().QueryRow(`SELECT value_enc FROM secrets WHERE alias='prod-cert'`).Scan(&enc)
+	if len(enc) == 0 || string(enc) == string(content) {
+		t.Error("value_enc must be ciphertext")
+	}
+}
+
 func TestUpdateSecret(t *testing.T) {
 	v := newInitedVault(t)
 	if _, err := v.AddSecret(AddSecretInput{

@@ -55,8 +55,8 @@ func TestMigrationsRecorded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SchemaVersion: %v", err)
 	}
-	if v < 7 {
-		t.Fatalf("expected schema version >=7 (all migrations applied), got %d", v)
+	if v < 10 {
+		t.Fatalf("expected schema version >=10 (all migrations applied), got %d", v)
 	}
 }
 
@@ -216,7 +216,7 @@ func TestMigrationIdempotent(t *testing.T) {
 	}
 
 	v, _ := SchemaVersion(db.SQL())
-	if v < 7 {
-		t.Fatalf("schema version should still be >=7 after re-runs, got %d", v)
+	if v < 10 {
+		t.Fatalf("schema version should still be >=10 after re-runs, got %d", v)
 	}
 }

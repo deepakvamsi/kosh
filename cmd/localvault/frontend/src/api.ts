@@ -21,6 +21,7 @@ declare global {
           AddSecret(input: AddSecretInput): Promise<IDResult>
           UpdateSecretValue(alias: string, newValue: string): Promise<BoolResult>
           UpdateSecret(input: UpdateSecretInput): Promise<BoolResult>
+          SaveSecretFile(alias: string): Promise<BoolResult>
           DeleteSecret(alias: string): Promise<BoolResult>
           ArchiveSecret(alias: string, archived: boolean): Promise<BoolResult>
           TagSecret(alias: string, tag: string): Promise<BoolResult>
@@ -74,6 +75,7 @@ export const api = {
   addSecret:     (input: AddSecretInput)     => go().AddSecret(input),
   updateValue:   (alias: string, val: string)=> go().UpdateSecretValue(alias, val),
   updateSecret:  (input: UpdateSecretInput)   => go().UpdateSecret(input),
+  saveSecretFile:(alias: string)              => go().SaveSecretFile(alias),
   deleteSecret:  (alias: string)             => go().DeleteSecret(alias),
   archiveSecret: (alias: string, v: boolean) => go().ArchiveSecret(alias, v),
   tagSecret:     (alias: string, tag: string)=> go().TagSecret(alias, tag),
