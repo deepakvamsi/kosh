@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -376,9 +378,14 @@ func (a *App) RevealSecret(alias string) (string, error) {
 	return v, nil
 }
 
+// maxSecretFileBytes caps a stored file. Files are encrypted into vault.db and copied into
+// every backup, so the cap keeps the vault lean; secrets that belong here (keys, certs,
+// kubeconfig, .p12, service-account JSON) are far under it.
+const maxSecretFileBytes = 5 * 1024 * 1024 // 5 MiB
+
 type AddSecretInput struct {
 	Alias        string `json:"alias"`
-	ItemType     string `json:"itemType"` // "api_key" (default) | "login" | "secure_note" | "keypair"
+	ItemType     string `json:"itemType"` // "api_key" (default) | "login" | "secure_note" | "keypair" | "file"
 	ProviderKey  string `json:"providerKey"`
 	Environment  string `json:"environment"`
 	Description  string `json:"description"`
@@ -388,13 +395,51 @@ type AddSecretInput struct {
 	Note         string `json:"note"`      // secure_note
 	AccessKey    string `json:"accessKey"` // keypair
 	SecretKey    string `json:"secretKey"` // keypair
+	FilePath     string `json:"filePath"`  // file: local path to read and encrypt (bytes never enter the UI)
+	FileName     string `json:"fileName"`  // file: original name (defaults to the path's base name)
 	ExpiresAt    *int64 `json:"expiresAt"`
 	RotationDays *int   `json:"rotationDays"`
+}
+
+// readSecretFile reads a file chosen for a "file" item, enforcing the size cap. The bytes
+// are read here in the Go layer and handed straight to the vault for encryption — they are
+// never returned to the webview.
+func readSecretFile(path string) (data []byte, name string, err error) {
+	if path == "" {
+		return nil, "", errors.New("no file selected")
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		return nil, "", fmt.Errorf("cannot read file: %w", err)
+	}
+	if fi.IsDir() {
+		return nil, "", errors.New("selected path is a directory, not a file")
+	}
+	if fi.Size() > maxSecretFileBytes {
+		return nil, "", fmt.Errorf("file is %.1f MB; the limit is 5 MB", float64(fi.Size())/(1024*1024))
+	}
+	data, err = os.ReadFile(path)
+	if err != nil {
+		return nil, "", fmt.Errorf("cannot read file: %w", err)
+	}
+	return data, filepath.Base(path), nil
 }
 
 func (a *App) AddSecret(in AddSecretInput) IDResult {
 	if a.vault == nil {
 		return IDResult{Err: errVaultUnavailable.Error()}
+	}
+	value := []byte(in.Value)
+	fileName := in.FileName
+	if in.ItemType == string(lv_vault.ItemFile) {
+		data, name, ferr := readSecretFile(in.FilePath)
+		if ferr != nil {
+			return IDResult{Err: ferr.Error()}
+		}
+		value = data
+		if fileName == "" {
+			fileName = name
+		}
 	}
 	id, err := a.vault.AddSecret(lv_vault.AddSecretInput{
 		Alias:        in.Alias,
@@ -402,12 +447,13 @@ func (a *App) AddSecret(in AddSecretInput) IDResult {
 		ProviderKey:  in.ProviderKey,
 		Environment:  lv_vault.Environment(in.Environment),
 		Description:  in.Description,
-		Value:        []byte(in.Value),
+		Value:        value,
 		Username:     in.Username,
 		Password:     in.Password,
 		Note:         in.Note,
 		AccessKey:    in.AccessKey,
 		SecretKey:    in.SecretKey,
+		FileName:     fileName,
 		ExpiresAt:    in.ExpiresAt,
 		RotationDays: in.RotationDays,
 	})
@@ -424,9 +470,11 @@ type RevealedItemDTO struct {
 	Value     string `json:"value"`
 	Username  string `json:"username"`
 	Password  string `json:"password"`
-	Note      string `json:"note"`
 	AccessKey string `json:"accessKey"`
 	SecretKey string `json:"secretKey"`
+	Note      string `json:"note"`
+	FileName  string `json:"fileName"` // file: metadata only — the bytes are never returned here
+	FileSize  int    `json:"fileSize"` // file: size in bytes
 	Err       string `json:"err,omitempty"`
 }
 
@@ -446,10 +494,40 @@ func (a *App) RevealItem(alias string) RevealedItemDTO {
 		Value:     r.Value,
 		Username:  r.Username,
 		Password:  r.Password,
-		Note:      r.Note,
 		AccessKey: r.AccessKey,
 		SecretKey: r.SecretKey,
+		Note:      r.Note,
+		FileName:  r.FileName,
+		FileSize:  r.FileSize,
 	}
+}
+
+// SaveSecretFile decrypts a "file" item and writes it to a location the user picks. The
+// bytes are handled only in the Go layer (never returned to the webview) and zeroized
+// afterward. A cancelled dialog is a no-op, not an error.
+func (a *App) SaveSecretFile(alias string) BoolResult {
+	if a.vault == nil {
+		return BoolResult{Err: errVaultUnavailable.Error()}
+	}
+	name, data, err := a.vault.RevealFile(alias)
+	if err != nil {
+		return BoolResult{Err: err.Error()}
+	}
+	defer lv_crypto.Zero(data)
+	dest, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:           "Save secret file",
+		DefaultFilename: name,
+	})
+	if err != nil {
+		return BoolResult{Err: err.Error()}
+	}
+	if dest == "" {
+		return BoolResult{} // cancelled — not an error, nothing written
+	}
+	if err := os.WriteFile(dest, data, 0o600); err != nil {
+		return BoolResult{Err: err.Error()}
+	}
+	return BoolResult{OK: true}
 }
 
 func (a *App) UpdateSecretValue(alias, newValue string) BoolResult {

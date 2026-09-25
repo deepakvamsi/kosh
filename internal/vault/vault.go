@@ -49,6 +49,7 @@ const (
 	ItemLogin      ItemType = "login"       // value_enc = JSON {"username","password"}
 	ItemSecureNote ItemType = "secure_note" // value_enc = note text
 	ItemKeyPair    ItemType = "keypair"     // value_enc = JSON {"accessKey","secretKey"}
+	ItemFile       ItemType = "file"        // value_enc = JSON {"name","data"} (data = file bytes)
 )
 
 // normalize maps the zero value to the default type so callers never have to.
@@ -61,7 +62,7 @@ func (t ItemType) normalize() ItemType {
 
 func validItemType(t ItemType) bool {
 	switch t {
-	case ItemAPIKey, ItemLogin, ItemSecureNote, ItemKeyPair:
+	case ItemAPIKey, ItemLogin, ItemSecureNote, ItemKeyPair, ItemFile:
 		return true
 	}
 	return false

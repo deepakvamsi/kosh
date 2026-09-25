@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, Fragment } from 'react'
 import { api } from '../api'
 import { SecretSummary, AddSecretInput, UpdateSecretInput, Provider, RevealedItem, ItemType } from '../types'
-import { Plus, Search, Eye, EyeOff, Copy, Trash2, Archive, RotateCcw, KeyRound, Link2, User, FileText, Star, Pencil } from 'lucide-react'
+import { Plus, Search, Eye, EyeOff, Copy, Trash2, Archive, RotateCcw, KeyRound, Link2, User, FileText, Star, Pencil, Paperclip, Download } from 'lucide-react'
 import CustomFieldsPanel from '../components/CustomFieldsPanel'
 import StrengthBar from '../components/StrengthBar'
 import TOTPPanel from '../components/TOTPPanel'
@@ -13,13 +13,24 @@ const ITEM_META: Record<ItemType, { label: string; Icon: typeof KeyRound }> = {
   login:       { label: 'Login',    Icon: User },
   keypair:     { label: 'Key pair', Icon: Link2 },
   secure_note: { label: 'Note',     Icon: FileText },
+  file:        { label: 'File',     Icon: Paperclip },
 }
+
+// The dropdown order for the Add form's type selector.
+const ADD_TYPES: { value: ItemType; label: string }[] = [
+  { value: 'api_key',     label: 'API key' },
+  { value: 'login',       label: 'Login' },
+  { value: 'keypair',     label: 'Key pair' },
+  { value: 'secure_note', label: 'Secure note' },
+  { value: 'file',        label: 'Secret file' },
+]
 
 // primarySecret is the single string the row-level Copy button yields for an item.
 function primarySecret(r: RevealedItem): string {
   if (r.itemType === 'login') return r.password
   if (r.itemType === 'secure_note') return r.note
   if (r.itemType === 'keypair') return r.secretKey
+  if (r.itemType === 'file') return r.fileName
   return r.value
 }
 
@@ -243,7 +254,7 @@ export default function SecretsView() {
                             <span className="select-text whitespace-pre-wrap break-words">{s.description}</span>
                           </p>
                         )}
-                        <RevealedFields item={revealed.item} onCopy={copyValue} copied={copied} />
+                        <RevealedFields item={revealed.item} alias={s.alias} onCopy={copyValue} copied={copied} />
                         <TOTPPanel alias={s.alias} hasTOTP={s.hasTOTP} onChanged={load} />
                         <CustomFieldsPanel
                           alias={s.alias}
@@ -275,12 +286,25 @@ export default function SecretsView() {
 // RevealedFields renders a revealed item's payload according to its type: a login shows
 // separately-copyable username and (masked) password; a secure note shows its body; an
 // API key shows its value. Every field has its own copy button.
-function RevealedFields({ item, onCopy, copied }: {
+function RevealedFields({ item, alias, onCopy, copied }: {
   item: RevealedItem
+  alias: string
   onCopy: (marker: string, value: string) => void
   copied: string
 }) {
   const [showPw, setShowPw] = useState(false)
+  const [saveMsg, setSaveMsg] = useState('')
+
+  async function saveFile() {
+    setSaveMsg('')
+    try {
+      const res = await api.saveSecretFile(alias)
+      if (res.err) setSaveMsg(res.err)
+      else if (res.ok) { setSaveMsg('Saved'); setTimeout(() => setSaveMsg(''), 2000) }
+    } catch (e: any) { setSaveMsg(String(e)) }
+  }
+
+  const fmtSize = (n: number) => n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / (1024 * 1024)).toFixed(1)} MB`
 
   const copyBtn = (marker: string, value: string) => (
     <button type="button" onClick={() => onCopy(marker, value)} title="Copy"
@@ -326,8 +350,22 @@ function RevealedFields({ item, onCopy, copied }: {
           {fieldRow('Secret key', item.secretKey, 'reveal-sk', { masked: true })}
         </>
       )}
+      {item.itemType === 'file' && (
+        <div className="flex items-center gap-2">
+          <span className="w-20 shrink-0 text-xs text-[rgb(var(--text-muted))]">File</span>
+          <code className="flex-1 truncate rounded border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 py-1.5 font-mono text-xs text-[rgb(var(--text))] select-text">
+            {item.fileName} <span className="text-[rgb(var(--text-muted))]">· {fmtSize(item.fileSize)}</span>
+          </code>
+          <button type="button" onClick={saveFile} title="Save file to disk"
+            className="flex items-center gap-1.5 rounded-md bg-[rgb(var(--accent)/0.15)] px-2.5 py-1.5 text-xs font-semibold text-[rgb(var(--accent))] hover:bg-[rgb(var(--accent)/0.25)]">
+            <Download className="h-3.5 w-3.5" /> Save…
+          </button>
+        </div>
+      )}
       {item.itemType === 'api_key' && fieldRow('Value', item.value, 'reveal-val')}
-      <span className="text-[11px] text-[rgb(var(--text-muted))]">Auto-hides in 30s · clipboard clears in 30s</span>
+      {item.itemType === 'file'
+        ? <span className="text-[11px] text-[rgb(var(--text-muted))]">{saveMsg || 'Saving writes a decrypted copy to the location you choose.'}</span>
+        : <span className="text-[11px] text-[rgb(var(--text-muted))]">Auto-hides in 30s · clipboard clears in 30s</span>}
     </div>
   )
 }
@@ -344,13 +382,29 @@ function AddModal({ providers, onClose, onSaved }: { providers: Provider[]; onCl
   const [showPw, setShowPw] = useState(false)
   const [showAK, setShowAK] = useState(false)
   const [showSK, setShowSK] = useState(false)
+  const [fileSize, setFileSize] = useState(0)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  const MAX_FILE = 5 * 1024 * 1024
   const inputCls = 'rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--bg))] px-3 py-2 text-sm text-[rgb(var(--text))] outline-none focus:border-[rgb(var(--accent))]'
   const labelCls = 'flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]'
   const eyeBtn = 'absolute right-2 top-1/2 -translate-y-1/2 text-[rgb(var(--text-muted))]'
   const set = (k: keyof AddSecretInput) => (e: { target: { value: string } }) => setForm(f => ({ ...f, [k]: e.target.value }))
+
+  // onFilePick reads the chosen file's metadata only. The real filesystem path is exposed
+  // by the Wails webview on the File object; the backend reads and encrypts the bytes from
+  // that path — the bytes never enter the UI.
+  function onFilePick(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    if (f.size > MAX_FILE) { setError(`File is ${(f.size / (1024 * 1024)).toFixed(1)} MB; the limit is 5 MB`); return }
+    const path = (f as any).path as string | undefined
+    if (!path) { setError('Could not resolve the file path'); return }
+    setError('')
+    setFileSize(f.size)
+    setForm(prev => ({ ...prev, filePath: path, fileName: f.name, alias: prev.alias || f.name.replace(/\.[^.]+$/, '').toUpperCase() }))
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -360,6 +414,7 @@ function AddModal({ providers, onClose, onSaved }: { providers: Provider[]; onCl
     if (mode === 'login' && (!form.username || !form.password)) { setError('Username and password are required'); return }
     if (mode === 'keypair' && (!form.accessKey || !form.secretKey)) { setError('Access key and secret key are required'); return }
     if (mode === 'secure_note' && !form.note) { setError('Note body is required'); return }
+    if (mode === 'file' && !form.filePath) { setError('Choose a file to upload'); return }
     setLoading(true)
     try {
       const res = await api.addSecret({ ...form, itemType: mode })
@@ -369,17 +424,11 @@ function AddModal({ providers, onClose, onSaved }: { providers: Provider[]; onCl
     finally { setLoading(false) }
   }
 
-  const TABS: { type: ItemType; label: string; Icon: typeof KeyRound }[] = [
-    { type: 'api_key',     label: 'API key',  Icon: KeyRound },
-    { type: 'login',       label: 'Login',    Icon: User },
-    { type: 'keypair',     label: 'Key pair', Icon: Link2 },
-    { type: 'secure_note', label: 'Note',     Icon: FileText },
-  ]
-
   const namePlaceholder =
     mode === 'login'       ? 'GITHUB_ACCOUNT' :
     mode === 'secure_note' ? 'RECOVERY_CODES' :
     mode === 'keypair'     ? 'AWS_BEDROCK_PROD' :
+    mode === 'file'        ? 'PROD_TLS_CERT' :
                              'MY_API_KEY'
 
   return (
@@ -387,14 +436,12 @@ function AddModal({ providers, onClose, onSaved }: { providers: Provider[]; onCl
       <div className="w-full max-w-lg rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] p-6 shadow-2xl">
         <h2 className="mb-4 text-base font-semibold">Add</h2>
 
-        <div className="mb-4 grid grid-cols-4 gap-2">
-          {TABS.map(({ type, label, Icon }) => (
-            <button key={type} type="button" onClick={() => { setMode(type); setError('') }}
-              className={`flex flex-col items-center gap-1 rounded-lg border px-2 py-2.5 text-xs font-medium transition-colors ${mode === type ? 'border-[rgb(var(--accent))] bg-[rgb(var(--accent)/0.1)] text-[rgb(var(--accent))]' : 'border-[rgb(var(--border))] text-[rgb(var(--text-muted))] hover:bg-white/5'}`}>
-              <Icon className="h-4 w-4" /> {label}
-            </button>
-          ))}
-        </div>
+        <label className={`mb-4 ${labelCls}`}>
+          Type
+          <select value={mode} onChange={e => { setMode(e.target.value as ItemType); setError('') }} className={inputCls}>
+            {ADD_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        </label>
 
         <form onSubmit={submit} className="flex flex-col gap-3">
           {/* Name — shared, always first */}
@@ -470,6 +517,19 @@ function AddModal({ providers, onClose, onSaved }: { providers: Provider[]; onCl
             <label className={labelCls}>
               Note
               <textarea value={form.note} onChange={set('note')} rows={5} placeholder="Recovery codes, connection strings, private notes…" className={`resize-y ${inputCls}`} />
+            </label>
+          )}
+
+          {mode === 'file' && (
+            <label className={labelCls}>
+              File <span className="text-[11px]">(encrypted into the vault · max 5 MB)</span>
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-[rgb(var(--border))] bg-[rgb(var(--bg))] px-3 py-3 text-sm hover:border-[rgb(var(--accent))]">
+                <Paperclip className="h-4 w-4 text-[rgb(var(--text-muted))]" />
+                {form.fileName
+                  ? <span className="truncate text-[rgb(var(--text))]">{form.fileName} <span className="text-[rgb(var(--text-muted))]">· {(fileSize / 1024).toFixed(1)} KB</span></span>
+                  : <span className="text-[rgb(var(--text-muted))]">Choose a file…</span>}
+                <input type="file" onChange={onFilePick} className="hidden" />
+              </label>
             </label>
           )}
 
@@ -584,6 +644,10 @@ function EditModal({ secret, onClose, onSaved }: { secret: SecretSummary; onClos
               New note
               <textarea value={note} onChange={e => setNote(e.target.value)} rows={5} placeholder={ph} className={`resize-y ${inputCls}`} />
             </label>
+          )}
+
+          {mode === 'file' && (
+            <p className="text-[11px] text-[rgb(var(--text-muted))]">This edits the description only. To replace the file, delete this entry and add it again.</p>
           )}
 
           <label className={labelCls}>
