@@ -14,7 +14,26 @@
   <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue">
 </p>
 
+<p align="center">
+  <a href="https://github.com/deepakvamsi/kosh/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/deepakvamsi/kosh?style=social"></a>
+  <a href="https://github.com/deepakvamsi/kosh/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/deepakvamsi/kosh?sort=semver"></a>
+  <a href="https://github.com/deepakvamsi/kosh/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/deepakvamsi/kosh/total"></a>
+  <a href="https://github.com/deepakvamsi/kosh/issues"><img alt="Open issues" src="https://img.shields.io/github/issues/deepakvamsi/kosh"></a>
+  <a href="https://github.com/deepakvamsi/kosh/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/deepakvamsi/kosh"></a>
+</p>
+
 <p align="center"><em>कोश — Sanskrit for the treasury that safeguards what's valuable.</em></p>
+
+<p align="center">
+  <strong>⭐ If Kosh is useful to you, please <a href="https://github.com/deepakvamsi/kosh">star the repo</a> — it's the single biggest thing that helps others discover it.</strong>
+</p>
+
+<!-- DEMO GIF — replace this placeholder with a 10–15s screen capture:
+     unlock vault → add an API key → reveal it → show the audit log.
+     Record with ScreenToGif (Windows) / Kap (macOS) / Peek (Linux), export as
+     docs/assets/demo.gif (keep it under ~8 MB), then swap the line below for:
+     <p align="center"><img src="docs/assets/demo.gif" alt="Kosh demo" width="760"></p> -->
+<p align="center"><sub>📹 Demo GIF coming soon — see the note in the README source for how to add it.</sub></p>
 
 > **Your secrets never leave your machine — and nothing on your machine can ask for them except you.**
 > No CLI, no local server, no MCP endpoint, no AI-tool hook. That attack surface doesn't exist; it was removed by construction, and a build-time test keeps it that way.

@@ -1,25 +1,68 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api } from '../api'
 import { Provider, AddProviderInput } from '../types'
-import { Cloud, Bot, GitBranch, Database, Layers, Box, Plus, Trash2, X } from 'lucide-react'
+import {
+  Cloud, Bot, GitBranch, Database, Layers, Box, Plus, Trash2, X,
+  Monitor, Server, Workflow, Package, MessageSquare, Activity,
+  MessageCircle, CreditCard, ShieldCheck, Globe, HardDrive, Search,
+  BarChart3, Wrench, KeyRound,
+} from 'lucide-react'
 
+const cls = 'h-4 w-4'
 const catIcon: Record<string, React.ReactNode> = {
-  cloud:    <Cloud     className="h-4 w-4" />,
-  ai:       <Bot       className="h-4 w-4" />,
-  vcs:      <GitBranch className="h-4 w-4" />,
-  db:       <Database  className="h-4 w-4" />,
-  platform: <Layers    className="h-4 w-4" />,
-  custom:   <Box       className="h-4 w-4" />,
+  cloud:      <Cloud         className={cls} />,
+  os:         <Monitor       className={cls} />,
+  infra:      <Server        className={cls} />,
+  cicd:       <Workflow      className={cls} />,
+  vcs:        <GitBranch     className={cls} />,
+  registry:   <Package       className={cls} />,
+  db:         <Database      className={cls} />,
+  messaging:  <MessageSquare className={cls} />,
+  monitoring: <Activity      className={cls} />,
+  comms:      <MessageCircle className={cls} />,
+  payments:   <CreditCard    className={cls} />,
+  auth:       <ShieldCheck   className={cls} />,
+  ai:         <Bot           className={cls} />,
+  cdn:        <Globe         className={cls} />,
+  storage:    <HardDrive     className={cls} />,
+  search:     <Search        className={cls} />,
+  analytics:  <BarChart3     className={cls} />,
+  devtools:   <Wrench        className={cls} />,
+  security:   <KeyRound      className={cls} />,
+  platform:   <Layers        className={cls} />,
+  custom:     <Box           className={cls} />,
 }
 
+// Ordered so related vendors sit together; also drives the Add-Vendor category picker.
+// Keys must match internal/storage.seedProviders categories.
 const CATEGORIES = [
-  { key: 'cloud',    label: 'Cloud' },
-  { key: 'ai',       label: 'AI / LLM' },
-  { key: 'vcs',      label: 'Version Control' },
-  { key: 'db',       label: 'Database' },
-  { key: 'platform', label: 'Platform / DevOps' },
-  { key: 'custom',   label: 'Custom' },
+  { key: 'cloud',      label: 'Cloud' },
+  { key: 'os',         label: 'Operating Systems' },
+  { key: 'infra',      label: 'Infrastructure & IaC' },
+  { key: 'cicd',       label: 'CI / CD' },
+  { key: 'vcs',        label: 'Version Control' },
+  { key: 'registry',   label: 'Package & Artifact Registries' },
+  { key: 'db',         label: 'Databases & Data' },
+  { key: 'messaging',  label: 'Messaging & Streaming' },
+  { key: 'monitoring', label: 'Monitoring & Observability' },
+  { key: 'comms',      label: 'Communication' },
+  { key: 'payments',   label: 'Payments' },
+  { key: 'auth',       label: 'Identity & Auth' },
+  { key: 'ai',         label: 'AI / LLM' },
+  { key: 'cdn',        label: 'CDN & Edge' },
+  { key: 'storage',    label: 'Object Storage' },
+  { key: 'search',     label: 'Search' },
+  { key: 'analytics',  label: 'Analytics' },
+  { key: 'devtools',   label: 'Dev Tools' },
+  { key: 'security',   label: 'Keys & Certificates' },
+  { key: 'platform',   label: 'Platform / DevOps' },
+  { key: 'custom',     label: 'Custom' },
 ]
+
+// A stable index so category groups render in CATEGORIES order (SQL returns rows by name).
+const CAT_ORDER: Record<string, number> = CATEGORIES.reduce(
+  (acc, c, i) => { acc[c.key] = i; return acc }, {} as Record<string, number>,
+)
 
 export default function ProvidersView() {
   const [providers, setProviders] = useState<Provider[]>([])
@@ -56,7 +99,9 @@ export default function ProvidersView() {
       </div>
 
       <div className="flex flex-col gap-6">
-        {Object.entries(groups).map(([cat, prov]) => (
+        {Object.entries(groups)
+          .sort(([a], [b]) => (CAT_ORDER[a] ?? 999) - (CAT_ORDER[b] ?? 999) || a.localeCompare(b))
+          .map(([cat, prov]) => (
           <div key={cat}>
             <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-[rgb(var(--text-muted))]">
               {catIcon[cat] ?? <Box className="h-4 w-4" />}

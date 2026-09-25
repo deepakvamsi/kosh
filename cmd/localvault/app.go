@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -781,9 +782,30 @@ func (a *App) AddProvider(in AddProviderInput) BoolResult {
 	if in.Key == "" || in.Name == "" {
 		return BoolResult{Err: "key and name are required"}
 	}
+	// The provider key is UNIQUE and ~130 vendors ship as built-ins, so re-adding one that
+	// already exists (e.g. "windows") must give a clear message instead of leaking the raw
+	// "UNIQUE constraint failed: providers.key" (SQLite error 2067) to the UI.
+	var existingName string
+	var isBuiltin int
+	switch err := a.vault.DB().SQL().QueryRow(
+		`SELECT name,is_builtin FROM providers WHERE key=?`, in.Key).Scan(&existingName, &isBuiltin); err {
+	case nil:
+		if isBuiltin == 1 {
+			return BoolResult{Err: fmt.Sprintf("%q is already available as a built-in vendor — pick it from the list.", existingName)}
+		}
+		return BoolResult{Err: fmt.Sprintf("a vendor with key %q already exists (%s)", in.Key, existingName)}
+	case sql.ErrNoRows:
+		// Not present — safe to insert below.
+	default:
+		return fail(err)
+	}
+	category := in.Category
+	if category == "" {
+		category = "custom"
+	}
 	_, err := a.vault.DB().SQL().Exec(
 		`INSERT INTO providers(key,name,category,is_builtin,created_at) VALUES(?,?,?,0,?)`,
-		in.Key, in.Name, in.Category, time.Now().Unix())
+		in.Key, in.Name, category, time.Now().Unix())
 	return fail(err)
 }
 

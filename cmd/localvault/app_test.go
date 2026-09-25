@@ -534,6 +534,36 @@ func TestAddProviderRejectsIncompleteInput(t *testing.T) {
 	}
 }
 
+// TestAddProviderRejectsDuplicateKey guards the fix for the raw SQLite 2067
+// ("UNIQUE constraint failed: providers.key") a user hit re-adding a seeded
+// vendor such as "windows": the duplicate must be reported cleanly, not leak the
+// driver error, and must not create a second row.
+func TestAddProviderRejectsDuplicateKey(t *testing.T) {
+	a := newApp(t)
+
+	// A built-in vendor (windows ships in the seed) cannot be re-added.
+	res := a.AddProvider(AddProviderInput{Key: "windows", Name: "Microsoft Windows", Category: "os"})
+	if res.OK {
+		t.Fatal("re-adding the built-in \"windows\" vendor succeeded")
+	}
+	if strings.Contains(strings.ToLower(res.Err), "constraint") || strings.Contains(res.Err, "2067") {
+		t.Fatalf("leaked raw SQLite error to the UI: %q", res.Err)
+	}
+
+	// A user-added vendor cannot be added twice either.
+	if res := a.AddProvider(AddProviderInput{Key: "acmecorp", Name: "Acme Corp", Category: "custom"}); !res.OK {
+		t.Fatalf("first custom AddProvider failed: %s", res.Err)
+	}
+	before, _ := a.ListProviders()
+	if res := a.AddProvider(AddProviderInput{Key: "acmecorp", Name: "Acme Corp Again", Category: "custom"}); res.OK {
+		t.Fatal("added a duplicate custom vendor key")
+	}
+	after, _ := a.ListProviders()
+	if len(after) != len(before) {
+		t.Fatalf("duplicate add changed provider count %d -> %d", len(before), len(after))
+	}
+}
+
 // --- KDF calibration and strengthening --------------------------------------------
 
 func TestGetKDFParamsReportsCurrentAndSuggested(t *testing.T) {
