@@ -426,6 +426,45 @@ func readSecretFile(path string) (data []byte, name string, err error) {
 	return data, filepath.Base(path), nil
 }
 
+// PickedFileDTO is the result of the native file picker: the real filesystem path (kept in
+// the Go layer and later read by AddSecret), plus the base name and size for the UI.
+type PickedFileDTO struct {
+	Path string `json:"path"`
+	Name string `json:"name"`
+	Size int    `json:"size"`
+	Err  string `json:"err"`
+}
+
+// PickSecretFile opens the OS "open file" dialog and returns the chosen file's path, name,
+// and size, validating the size cap up front. The webview cannot resolve a local filesystem
+// path from an <input type="file"> (that is an Electron extension, absent in a Wails
+// webview), so selection must go through the native dialog here; the bytes themselves are
+// read later by AddSecret and never enter the UI. A cancelled dialog returns an empty
+// result with no error.
+func (a *App) PickSecretFile() PickedFileDTO {
+	if a.vault == nil {
+		return PickedFileDTO{Err: errVaultUnavailable.Error()}
+	}
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{Title: "Choose a file to store in the vault"})
+	if err != nil {
+		return PickedFileDTO{Err: err.Error()}
+	}
+	if path == "" {
+		return PickedFileDTO{} // cancelled
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		return PickedFileDTO{Err: fmt.Sprintf("cannot read file: %v", err)}
+	}
+	if fi.IsDir() {
+		return PickedFileDTO{Err: "selected path is a directory, not a file"}
+	}
+	if fi.Size() > maxSecretFileBytes {
+		return PickedFileDTO{Err: fmt.Sprintf("file is %.1f MB; the limit is 5 MB", float64(fi.Size())/(1024*1024))}
+	}
+	return PickedFileDTO{Path: path, Name: filepath.Base(path), Size: int(fi.Size())}
+}
+
 func (a *App) AddSecret(in AddSecretInput) IDResult {
 	if a.vault == nil {
 		return IDResult{Err: errVaultUnavailable.Error()}

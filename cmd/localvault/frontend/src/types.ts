@@ -57,6 +57,7 @@ export type KdfParams = {
 // an array, never null.
 export type SecretList = { items: SecretSummary[]; err?: string }
 export type IDResult   = { id: number; err?: string }
+export type PickedFile = { path: string; name: string; size: number; err?: string }
 
 export type HealthItem = {
   secretId: number
