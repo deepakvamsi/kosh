@@ -200,7 +200,7 @@
     <p class="lead">A single desktop app that does one thing well: protect the credentials that live on your laptop.</p>
     <div class="grid">
       <div class="card"><span class="ic">🔑</span><h3>Envelope encryption</h3><p>An Argon2id-derived key-encryption-key wraps a random data-encryption-key; every value is sealed with XChaCha20-Poly1305 AEAD. Nothing is stored in plaintext.</p></div>
-      <div class="card"><span class="ic">📴</span><h3>Air-sealed</h3><p>No cloud, no login server, no telemetry, no listener. A build-time guard rejects any networking import, so the offline guarantee can't silently regress.</p></div>
+      <div class="card"><span class="ic">📴</span><h3>Air-sealed</h3><p>No cloud, no login server, no telemetry, no listener. A build-time guard rejects networking imports in Kosh's own code, so the offline guarantee can't silently regress.</p></div>
       <div class="card"><span class="ic">🧾</span><h3>Tamper-evident audit log</h3><p>Every action is a hash-chained, HMAC-authenticated record. Editing, deleting, or truncating entries is detectable even with full write access to the file.</p></div>
       <div class="card"><span class="ic">🗂️</span><h3>Typed items</h3><p>API keys, logins, key pairs, secure notes, and encrypted secret files. Every sensitive field lives only inside the encrypted blob — never a queryable column.</p></div>
       <div class="card"><span class="ic">👁️</span><h3>Names without values</h3><p>Browse which secrets you have without decrypting any value. Decryption happens only on an explicit, audited reveal.</p></div>
