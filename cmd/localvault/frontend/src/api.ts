@@ -1,4 +1,4 @@
-import { BoolResult, BoolQuery, SecretList, KdfParams, IDResult, SecretSummary, RevealedItem, HealthItem, AuditEntry, Provider, AddSecretInput, UpdateSecretInput, ImportPreviewResult, ImportCommitResult, AddProviderInput } from './types'
+import { BoolResult, BoolQuery, SecretList, KdfParams, IDResult, SecretSummary, RevealedItem, HealthItem, AuditEntry, Provider, AddSecretInput, UpdateSecretInput, ImportPreviewResult, ImportCommitResult, AddProviderInput, PickedFile } from './types'
 
 declare global {
   interface Window {
@@ -19,6 +19,7 @@ declare global {
           RevealSecret(alias: string): Promise<string>
           RevealItem(alias: string): Promise<RevealedItem>
           AddSecret(input: AddSecretInput): Promise<IDResult>
+          PickSecretFile(): Promise<PickedFile>
           UpdateSecretValue(alias: string, newValue: string): Promise<BoolResult>
           UpdateSecret(input: UpdateSecretInput): Promise<BoolResult>
           SaveSecretFile(alias: string): Promise<BoolResult>
@@ -76,6 +77,7 @@ export const api = {
   updateValue:   (alias: string, val: string)=> go().UpdateSecretValue(alias, val),
   updateSecret:  (input: UpdateSecretInput)   => go().UpdateSecret(input),
   saveSecretFile:(alias: string)              => go().SaveSecretFile(alias),
+  pickSecretFile:()                           => go().PickSecretFile(),
   deleteSecret:  (alias: string)             => go().DeleteSecret(alias),
   archiveSecret: (alias: string, v: boolean) => go().ArchiveSecret(alias, v),
   tagSecret:     (alias: string, tag: string)=> go().TagSecret(alias, tag),

@@ -9,6 +9,32 @@ was before — a security note that only describes the fix is not auditable.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-09-25
+
+### Fixed
+
+- **Secret-file upload ("could not resolve file path").** Choosing a file for a `file`
+  item failed in the packaged app because the webview cannot expose a local filesystem
+  path from an `<input type="file">` (that is an Electron extension, absent in a Wails
+  webview), so the frontend never got a path to hand the backend. File selection now goes
+  through the OS "open file" dialog in the Go layer (`App.PickSecretFile`, using
+  `runtime.OpenFileDialog`), which returns the real path, name, and size and enforces the
+  5 MB cap up front. The security property is unchanged: file bytes are still read and
+  encrypted entirely in the Go layer and never enter the webview.
+- **Duplicate-vendor error.** Re-adding a vendor whose key already exists (e.g. a seeded
+  one such as `windows`) surfaced the raw SQLite `UNIQUE constraint failed: providers.key`
+  (2067). `AddProvider` now returns a clear message and points built-in duplicates at the
+  existing entry.
+
+### Changed
+
+- **Providers screen shows every category.** The vendor list and the Add-Vendor picker
+  previously recognised only 6 categories, so the broad v0.6.0 seed's other categories
+  (operating systems, infrastructure, CI/CD, registries, messaging, monitoring, comms,
+  payments, auth, CDN, storage, search, analytics, dev tools, keys/certs) rendered under
+  raw lowercase headers and could not be chosen for a custom vendor. All 20 categories now
+  have a label, an icon, and a stable display order.
+
 ## [0.6.0] - 2026-09-25
 
 ### Added

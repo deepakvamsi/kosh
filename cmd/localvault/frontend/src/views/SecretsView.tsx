@@ -386,24 +386,21 @@ function AddModal({ providers, onClose, onSaved }: { providers: Provider[]; onCl
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const MAX_FILE = 5 * 1024 * 1024
   const inputCls = 'rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--bg))] px-3 py-2 text-sm text-[rgb(var(--text))] outline-none focus:border-[rgb(var(--accent))]'
   const labelCls = 'flex flex-col gap-1 text-xs text-[rgb(var(--text-muted))]'
   const eyeBtn = 'absolute right-2 top-1/2 -translate-y-1/2 text-[rgb(var(--text-muted))]'
   const set = (k: keyof AddSecretInput) => (e: { target: { value: string } }) => setForm(f => ({ ...f, [k]: e.target.value }))
 
-  // onFilePick reads the chosen file's metadata only. The real filesystem path is exposed
-  // by the Wails webview on the File object; the backend reads and encrypts the bytes from
-  // that path — the bytes never enter the UI.
-  function onFilePick(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0]
-    if (!f) return
-    if (f.size > MAX_FILE) { setError(`File is ${(f.size / (1024 * 1024)).toFixed(1)} MB; the limit is 5 MB`); return }
-    const path = (f as any).path as string | undefined
-    if (!path) { setError('Could not resolve the file path'); return }
+  // pickFile opens the OS file dialog through the Go backend, which returns the real
+  // filesystem path (a Wails webview can't resolve a path from <input type="file">). The
+  // backend later reads and encrypts the bytes from that path — the bytes never enter the UI.
+  async function pickFile() {
+    const res = await api.pickSecretFile()
+    if (res.err) { setError(res.err); return }
+    if (!res.path) return // dialog cancelled
     setError('')
-    setFileSize(f.size)
-    setForm(prev => ({ ...prev, filePath: path, fileName: f.name, alias: prev.alias || f.name.replace(/\.[^.]+$/, '').toUpperCase() }))
+    setFileSize(res.size)
+    setForm(prev => ({ ...prev, filePath: res.path, fileName: res.name, alias: prev.alias || res.name.replace(/\.[^.]+$/, '').toUpperCase() }))
   }
 
   async function submit(e: React.FormEvent) {
@@ -523,13 +520,16 @@ function AddModal({ providers, onClose, onSaved }: { providers: Provider[]; onCl
           {mode === 'file' && (
             <label className={labelCls}>
               File <span className="text-[11px]">(encrypted into the vault · max 5 MB)</span>
-              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-[rgb(var(--border))] bg-[rgb(var(--bg))] px-3 py-3 text-sm hover:border-[rgb(var(--accent))]">
+              <button
+                type="button"
+                onClick={pickFile}
+                className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-[rgb(var(--border))] bg-[rgb(var(--bg))] px-3 py-3 text-left text-sm hover:border-[rgb(var(--accent))]"
+              >
                 <Paperclip className="h-4 w-4 text-[rgb(var(--text-muted))]" />
                 {form.fileName
                   ? <span className="truncate text-[rgb(var(--text))]">{form.fileName} <span className="text-[rgb(var(--text-muted))]">· {(fileSize / 1024).toFixed(1)} KB</span></span>
                   : <span className="text-[rgb(var(--text-muted))]">Choose a file…</span>}
-                <input type="file" onChange={onFilePick} className="hidden" />
-              </label>
+              </button>
             </label>
           )}
 
