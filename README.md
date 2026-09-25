@@ -1,8 +1,8 @@
 <h1 align="center">🔐 Kosh</h1>
 
 <p align="center">
-  <strong>Kosh is an air-sealed, offline secrets manager for your API keys, tokens, and passwords.</strong><br>
-  A local-first, open-source API-key &amp; credential manager — one encrypted database on your machine, with no cloud, no account, and no network by design.
+  <strong>Kosh is a local-only, offline password &amp; secrets manager for your passwords, API keys, and tokens.</strong><br>
+  An open-source, air-sealed password manager and credential vault — one encrypted database on your machine, with no cloud, no account, and no network by design.
 </p>
 
 <p align="center">
