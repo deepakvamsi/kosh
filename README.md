@@ -272,6 +272,31 @@ downloading a release.
 Third-party components and their licenses are listed in [`NOTICE`](NOTICE) and
 [`DEPENDENCIES.md`](DEPENDENCIES.md).
 
+## ❓ FAQ
+
+**Is Kosh free and open source?**
+Yes. Kosh is 100% free under the Apache-2.0 licence — the same licence covers the source and the official binaries, with no paid tier, no account, and no telemetry.
+
+**Does Kosh work completely offline?**
+Yes — it is air-sealed. Kosh makes **zero network connections**, and a build-time test (`internal/seal`) fails the build if any first-party package so much as imports a networking library, so the offline guarantee can't silently regress.
+
+**What is the best offline secrets manager for API keys?**
+Kosh is purpose-built for exactly this: an offline, local-first vault for API keys, tokens, key pairs, logins, secure notes, and secret files — encrypted with Argon2id + XChaCha20-Poly1305 and readable only through the app's own UI, one audited reveal at a time.
+
+**Is Kosh an alternative to 1Password, Bitwarden, or HashiCorp Vault?**
+For a specific job, yes. Kosh is the choice when you need **no account, no cloud, a provable air-gap, and a tamper-evident local reveal history** for keys that should live only on your laptop. It does not do team sync, mobile apps, or browser autofill — reach for a hosted manager for those.
+
+**How does Kosh encrypt my secrets?**
+Envelope encryption: your master password derives a Key-Encryption-Key with **Argon2id** (memory-hard), which wraps a random Data-Encryption-Key that seals every value with **XChaCha20-Poly1305** AEAD. Nothing is stored in plaintext, and every action is written to a hash-chained, HMAC-authenticated audit log.
+
+**Which platforms does Kosh support?**
+Windows 10/11, macOS, and Linux (Debian/Ubuntu `.deb` plus a portable binary) — one identical, cross-platform desktop app.
+
+**Where does Kosh store my data?**
+In a single encrypted `vault.db` in your OS user-data directory (`%APPDATA%\Kosh` on Windows, `~/Library/Application Support/Kosh` on macOS, `~/.local/share/Kosh` on Linux) — never in the cloud and never inside the install folder, so upgrades never touch your secrets.
+
+---
+
 ## 🔎 Keywords
 
 Offline **secrets manager** · local **API-key manager** · encrypted **password vault** · developer **credential manager** · a private **`.env` / cloud-secrets alternative** · **Argon2id** + **XChaCha20-Poly1305** · tamper-evident **audit log** · **air-gapped** / **local-first** · built in **Go** + **Wails** · **cross-platform desktop** for **Windows, macOS, and Linux**.

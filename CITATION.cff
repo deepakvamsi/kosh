@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+title: "Kosh — offline, air-sealed secrets & API-key manager"
+message: "If you use Kosh, please cite it using this metadata."
+type: software
+authors:
+  - family-names: Vamsi
+    given-names: Deepak
+repository-code: "https://github.com/deepakvamsi/kosh"
+url: "https://deepakvamsi.github.io/kosh/"
+abstract: >-
+  Kosh is a free, open-source, air-sealed offline secrets manager for API keys,
+  tokens, key pairs, logins, secure notes, and secret files. It keeps every
+  credential in one encrypted local database (Argon2id + XChaCha20-Poly1305
+  envelope encryption) with a tamper-evident, hash-chained audit log, and makes
+  zero network connections by design. Cross-platform desktop app for Windows,
+  macOS, and Linux, built in Go and Wails.
+keywords:
+  - secrets-manager
+  - password-manager
+  - api-key-manager
+  - credential-manager
+  - offline
+  - air-gapped
+  - local-first
+  - encryption
+  - argon2id
+  - xchacha20-poly1305
+  - go
+  - wails
+  - cross-platform
+license: Apache-2.0
