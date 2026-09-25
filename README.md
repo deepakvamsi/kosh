@@ -75,7 +75,7 @@ Your credentials are scattered and unprotected right now:
 
 ## What Kosh is
 
-A single desktop app that keeps every credential in one **encrypted local database**, unlocked by one master password, and readable **only through the app's own UI — one reveal at a time, every reveal written to a tamper-evident log.** It runs identically on Windows, macOS, and Linux, and it makes **zero network connections** — a property enforced by a test that fails the build if any package so much as imports `net/http`.
+A single desktop app that keeps every credential in one **encrypted local database**, unlocked by one master password, and readable **only through the app's own UI — one reveal at a time, every reveal written to a tamper-evident log.** It runs identically on Windows, macOS, and Linux, and it makes **zero network connections** — its own code is held to that by a test that fails CI if any first-party package so much as imports a networking package like `net/http`.
 
 Pull your keys out of a dozen spreadsheets and into one treasury that actually protects them.
 
@@ -88,7 +88,7 @@ Pull your keys out of a dozen spreadsheets and into one treasury that actually p
 | 🔑 **Envelope encryption** | An Argon2id-derived Key-Encryption-Key wraps a random Data-Encryption-Key; secret values are sealed with XChaCha20-Poly1305 AEAD. Nothing is stored in plaintext. |
 | 🗂️ **Typed items** | Store API keys, full **logins** (username + password), and **secure notes**. Every sensitive field — the username included — is encrypted inside the value blob; none of it touches a queryable column. |
 | 🧾 **Tamper-evident audit log** | Every action is a hash-chained record, and every record written while unlocked is HMAC'd under a key derived from your master password, with the chain head anchored. Editing, deleting or truncating entries is detected even by someone with full write access to the database file. |
-| 📴 **Air-sealed** | No cloud, no login server, no telemetry, no listener. A build-time guard (`internal/seal`) rejects any networking import so the offline guarantee can't silently regress. |
+| 📴 **Air-sealed** | No cloud, no login server, no telemetry, no listener. A build-time guard (`internal/seal`) rejects networking imports in Kosh's own code so the offline guarantee can't silently regress. |
 | 👁️ **Names without values** | Browse *which* secrets you have (`OPENAI_PROD`, `AWS_STAGING`) without decrypting a single value; decryption happens only on an explicit, audited reveal. |
 | 🩺 **Credential health** | Flags expired, expiring-soon, unused, stale, and duplicate credentials so you actually rotate them. |
 | 🔒 **Auto-lock, enforced in the core** | The in-memory key is wiped on idle by the Go backend itself — not just a UI timer — so a frozen or bypassed frontend can't keep the vault open. |
