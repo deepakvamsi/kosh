@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Kosh — Offline, Air-Sealed Secrets &amp; API-Key Manager</title>
+<meta name="description" content="Kosh is a free, open-source, offline secrets manager for API keys, tokens, key pairs, logins, notes, and secret files. Encrypted local vault with Argon2id + XChaCha20-Poly1305, a tamper-evident audit log, and zero network by design. For Windows, macOS, and Linux.">
+<meta name="keywords" content="offline secrets manager, api key manager, password vault, credential manager, env file alternative, 1password alternative, bitwarden alternative, hashicorp vault alternative, argon2id, xchacha20-poly1305, air-gapped, local-first, encryption, go, wails, windows, macos, linux">
+<meta name="author" content="Deepak Vamsi">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="canonical" href="https://deepakvamsi.github.io/kosh/">
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Kosh">
+<meta property="og:title" content="Kosh — Offline, Air-Sealed Secrets &amp; API-Key Manager">
+<meta property="og:description" content="A free, open-source, offline vault for API keys and credentials. Argon2id + XChaCha20-Poly1305, tamper-evident audit log, zero network by design. Windows, macOS, Linux.">
+<meta property="og:url" content="https://deepakvamsi.github.io/kosh/">
+<meta property="og:image" content="https://deepakvamsi.github.io/kosh/og-image.png">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Kosh — Offline, Air-Sealed Secrets &amp; API-Key Manager">
+<meta name="twitter:description" content="A free, open-source, offline vault for API keys and credentials. Argon2id + XChaCha20-Poly1305, tamper-evident audit log, zero network by design.">
+<meta name="twitter:image" content="https://deepakvamsi.github.io/kosh/og-image.png">
+
+<meta name="theme-color" content="#0b1020">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%90%3C/text%3E%3C/svg%3E">
+
+<!-- Structured data: SoftwareApplication -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Kosh",
+  "alternateName": "Kosh Secrets Manager",
+  "applicationCategory": "SecurityApplication",
+  "operatingSystem": "Windows, macOS, Linux",
+  "description": "Kosh is a free, open-source, air-sealed offline secrets manager for API keys, tokens, key pairs, logins, secure notes, and secret files. Encrypted local vault with Argon2id + XChaCha20-Poly1305 envelope encryption and a tamper-evident, hash-chained audit log. Zero network connections by design.",
+  "url": "https://deepakvamsi.github.io/kosh/",
+  "downloadUrl": "https://github.com/deepakvamsi/kosh/releases/latest",
+  "softwareVersion": "0.6.0",
+  "license": "https://www.apache.org/licenses/LICENSE-2.0",
+  "isAccessibleForFree": true,
+  "author": { "@type": "Person", "name": "Deepak Vamsi" },
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "featureList": [
+    "Offline / air-sealed — zero network connections",
+    "Argon2id + XChaCha20-Poly1305 envelope encryption",
+    "Tamper-evident, hash-chained audit log",
+    "API keys, logins, key pairs, secure notes, secret files",
+    "Cross-platform: Windows, macOS, Linux",
+    "No account, no cloud, no telemetry"
+  ]
+}
+</script>
+<!-- Structured data: FAQ -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is Kosh free and open source?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. Kosh is 100% free under the Apache-2.0 licence, with no paid tier, no account, and no telemetry." }
+    },
+    {
+      "@type": "Question",
+      "name": "Does Kosh work completely offline?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. Kosh makes zero network connections, and a build-time test fails the build if any first-party package imports a networking library, so the offline guarantee cannot silently regress." }
+    },
+    {
+      "@type": "Question",
+      "name": "Is Kosh an alternative to 1Password, Bitwarden, or HashiCorp Vault?",
+      "acceptedAnswer": { "@type": "Answer", "text": "For a specific job, yes. Kosh is the choice when you need no account, no cloud, a provable air-gap, and a tamper-evident local reveal history for keys that should live only on your machine." }
+    },
+    {
+      "@type": "Question",
+      "name": "How does Kosh encrypt my secrets?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Envelope encryption: the master password derives an Argon2id Key-Encryption-Key that wraps a random Data-Encryption-Key, which seals every value with XChaCha20-Poly1305 AEAD. Nothing is stored in plaintext." }
+    }
+  ]
+}
+</script>
+
+<style>
+  :root{
+    --bg:#0b1020; --panel:#131a30; --panel2:#0f1526; --line:#26304d;
+    --fg:#e8ecf6; --muted:#9aa6c4; --accent:#5b8cff; --accent2:#3ad3a3; --gold:#d4a017;
+    --radius:14px; --maxw:1080px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent); text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 20px}
+  header.nav{position:sticky; top:0; z-index:10; backdrop-filter:blur(10px);
+    background:rgba(11,16,32,.72); border-bottom:1px solid var(--line)}
+  .nav .wrap{display:flex; align-items:center; justify-content:space-between; height:60px}
+  .brand{font-weight:700; font-size:1.15rem; letter-spacing:.3px}
+  .brand span{color:var(--accent)}
+  .nav nav a{color:var(--muted); margin-left:18px; font-size:.95rem}
+  .nav nav a:hover{color:var(--fg); text-decoration:none}
+  .hero{padding:72px 0 40px; text-align:center}
+  .kicker{display:inline-block; font-size:.8rem; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--accent2); border:1px solid var(--line); border-radius:999px; padding:6px 14px; margin-bottom:20px}
+  h1{font-size:clamp(2rem,5vw,3.3rem); line-height:1.1; margin:.2em 0}
+  h1 .em{background:linear-gradient(90deg,var(--accent),var(--accent2)); -webkit-background-clip:text; background-clip:text; color:transparent}
+  .sub{font-size:clamp(1.05rem,2.4vw,1.3rem); color:var(--muted); max-width:760px; margin:18px auto 0}
+  .cta{display:flex; gap:14px; justify-content:center; flex-wrap:wrap; margin:34px 0 8px}
+  .btn{display:inline-block; padding:13px 24px; border-radius:12px; font-weight:600; border:1px solid var(--line)}
+  .btn.primary{background:linear-gradient(90deg,var(--accent),#6f7dff); color:#fff; border:none}
+  .btn.primary:hover{filter:brightness(1.08); text-decoration:none}
+  .btn.ghost{background:var(--panel); color:var(--fg)}
+  .btn.ghost:hover{border-color:var(--accent); text-decoration:none}
+  .badges{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:22px}
+  .badges img{height:22px}
+  section{padding:52px 0; border-top:1px solid var(--line)}
+  h2{font-size:clamp(1.5rem,3.5vw,2.1rem); margin:0 0 8px}
+  .lead{color:var(--muted); max-width:720px; margin:0 0 28px}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:18px}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:22px}
+  .card h3{margin:0 0 6px; font-size:1.12rem}
+  .card p{margin:0; color:var(--muted); font-size:.97rem}
+  .ic{font-size:1.5rem; display:block; margin-bottom:10px}
+  table{width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line);
+    border-radius:var(--radius); overflow:hidden; font-size:.95rem}
+  th,td{padding:12px 14px; border-bottom:1px solid var(--line); text-align:left}
+  th{background:var(--panel2); color:var(--fg)}
+  td.c,th.c{text-align:center}
+  tr:last-child td{border-bottom:none}
+  .yes{color:var(--accent2); font-weight:700}
+  .no{color:var(--muted)}
+  .faq details{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:4px 18px; margin-bottom:12px}
+  .faq summary{cursor:pointer; font-weight:600; padding:12px 0; list-style:none}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary::before{content:"+"; color:var(--accent); margin-right:10px; font-weight:700}
+  .faq details[open] summary::before{content:"–"}
+  .faq p{color:var(--muted); margin:0 0 14px}
+  code{background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:2px 7px; font-size:.9em}
+  footer{padding:40px 0; border-top:1px solid var(--line); color:var(--muted); text-align:center; font-size:.9rem}
+  .note{font-size:.85rem; color:var(--muted); margin-top:18px}
+  @media (prefers-color-scheme:light){
+    :root:not([data-theme="dark"]){
+      --bg:#f6f8ff; --panel:#ffffff; --panel2:#eef2fb; --line:#d9e0f0;
+      --fg:#101527; --muted:#54607d; --accent:#2b5cff; --accent2:#1c9e77;
+    }
+    :root:not([data-theme="dark"]) .nav{background:rgba(246,248,255,.8)}
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <div class="brand">🔐 <span>Kosh</span></div>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#security">Security</a>
+      <a href="#compare">Compare</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/deepakvamsi/kosh">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<section class="hero" style="border-top:none">
+  <div class="wrap">
+    <span class="kicker">Offline · Open source · Air-sealed</span>
+    <h1>The offline vault for your<br><span class="em">API keys &amp; secrets</span></h1>
+    <p class="sub">Kosh keeps every API key, token, key pair, login, note, and secret file in one
+      encrypted database on <em>your</em> machine — no cloud, no account, no network by design.
+      Your secrets never leave your machine, and nothing on it can ask for them except you.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/deepakvamsi/kosh/releases/latest">⬇ Download for Windows, macOS &amp; Linux</a>
+      <a class="btn ghost" href="https://github.com/deepakvamsi/kosh">★ Star on GitHub</a>
+    </div>
+    <div class="badges">
+      <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-informational">
+      <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue">
+      <img alt="Telemetry" src="https://img.shields.io/badge/telemetry-none-success">
+      <img alt="Network" src="https://img.shields.io/badge/network-air--sealed-success">
+      <img alt="Price" src="https://img.shields.io/badge/price-free-brightgreen">
+    </div>
+    <p class="note"><em>कोश — Sanskrit for the treasury that safeguards what's valuable.</em></p>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2>Why Kosh</h2>
+    <p class="lead">A single desktop app that does one thing well: protect the credentials that live on your laptop.</p>
+    <div class="grid">
+      <div class="card"><span class="ic">🔑</span><h3>Envelope encryption</h3><p>An Argon2id-derived key-encryption-key wraps a random data-encryption-key; every value is sealed with XChaCha20-Poly1305 AEAD. Nothing is stored in plaintext.</p></div>
+      <div class="card"><span class="ic">📴</span><h3>Air-sealed</h3><p>No cloud, no login server, no telemetry, no listener. A build-time guard rejects any networking import, so the offline guarantee can't silently regress.</p></div>
+      <div class="card"><span class="ic">🧾</span><h3>Tamper-evident audit log</h3><p>Every action is a hash-chained, HMAC-authenticated record. Editing, deleting, or truncating entries is detectable even with full write access to the file.</p></div>
+      <div class="card"><span class="ic">🗂️</span><h3>Typed items</h3><p>API keys, logins, key pairs, secure notes, and encrypted secret files. Every sensitive field lives only inside the encrypted blob — never a queryable column.</p></div>
+      <div class="card"><span class="ic">👁️</span><h3>Names without values</h3><p>Browse which secrets you have without decrypting any value. Decryption happens only on an explicit, audited reveal.</p></div>
+      <div class="card"><span class="ic">🩺</span><h3>Credential health</h3><p>Flags expired, expiring-soon, unused, stale, and duplicate credentials so you actually rotate them.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="security" style="background:var(--panel2)">
+  <div class="wrap">
+    <h2>Security you can verify</h2>
+    <p class="lead">Kosh implements well-reviewed primitives — and every claim is checkable in the open-source repository.</p>
+    <div class="grid">
+      <div class="card"><h3>Argon2id key derivation</h3><p>Memory-hard, per-vault random salt, cost calibrated to your machine at setup and raisable later.</p></div>
+      <div class="card"><h3>XChaCha20-Poly1305</h3><p>Authenticated encryption; each value binds its row id + provider + environment as associated data.</p></div>
+      <div class="card"><h3>No exfiltration surface</h3><p>No CLI, no local server, no API, no extension. The only interface is the app's own UI.</p></div>
+      <div class="card"><h3>Auto-lock in the core</h3><p>The in-memory key is wiped on idle by the Go backend itself, not just a UI timer.</p></div>
+      <div class="card"><h3>Screen-capture exclusion</h3><p>The window is excluded from screenshots and recorders on Windows and macOS.</p></div>
+      <div class="card"><h3>Portable encrypted backups</h3><p>Authenticated, self-contained archives you can restore onto a fresh machine.</p></div>
+    </div>
+    <p class="note"><strong>Honest by policy:</strong> Kosh is not "military grade" and not "SOC 2 certified" — certification is an organizational audit, not a property of software. See the threat model in the repository.</p>
+  </div>
+</section>
+
+<section id="compare">
+  <div class="wrap">
+    <h2>Why not just…</h2>
+    <p class="lead">Kosh isn't a cloud platform. It's the vault for the keys that live on your laptop.</p>
+    <table>
+      <thead><tr><th>Property</th><th class="c">.env / spreadsheets</th><th class="c">Cloud managers</th><th class="c">HashiCorp Vault</th><th class="c">Kosh</th></tr></thead>
+      <tbody>
+        <tr><td>Works fully offline</td><td class="c yes">✔</td><td class="c no">—</td><td class="c no">—</td><td class="c yes">✔</td></tr>
+        <tr><td>No account / no server to run</td><td class="c yes">✔</td><td class="c no">—</td><td class="c no">—</td><td class="c yes">✔</td></tr>
+        <tr><td>Encrypted at rest</td><td class="c no">—</td><td class="c yes">✔</td><td class="c yes">✔</td><td class="c yes">✔</td></tr>
+        <tr><td>Per-secret, audited access</td><td class="c no">—</td><td class="c no">~</td><td class="c yes">✔</td><td class="c yes">✔</td></tr>
+        <tr><td>Tamper-evident log</td><td class="c no">—</td><td class="c no">~</td><td class="c yes">✔</td><td class="c yes">✔</td></tr>
+        <tr><td>No queryable API to exfiltrate through</td><td class="c no">—</td><td class="c no">—</td><td class="c no">—</td><td class="c yes">✔</td></tr>
+        <tr><td>Zero network by design</td><td class="c yes">✔</td><td class="c no">—</td><td class="c no">—</td><td class="c yes">✔</td></tr>
+        <tr><td>Desktop UX for humans</td><td class="c no">—</td><td class="c yes">✔</td><td class="c no">—</td><td class="c yes">✔</td></tr>
+      </tbody>
+    </table>
+    <p class="note">Need team sharing, mobile sync, or browser autofill? Use 1Password or Bitwarden — Kosh does none of those, by design. Different problems.</p>
+  </div>
+</section>
+
+<section id="faq" class="faq" style="background:var(--panel2)">
+  <div class="wrap">
+    <h2>Frequently asked questions</h2>
+    <details open><summary>Is Kosh free and open source?</summary><p>Yes. Kosh is 100% free under the Apache-2.0 licence — the same licence covers the source and the official binaries, with no paid tier, no account, and no telemetry.</p></details>
+    <details><summary>Does Kosh work completely offline?</summary><p>Yes — it's air-sealed. Kosh makes zero network connections, and a build-time test fails the build if any first-party package so much as imports a networking library.</p></details>
+    <details><summary>What is the best offline secrets manager for API keys?</summary><p>Kosh is purpose-built for exactly this: an offline, local-first vault for API keys, tokens, key pairs, logins, secure notes, and secret files — encrypted with Argon2id + XChaCha20-Poly1305 and readable only through the app's own UI, one audited reveal at a time.</p></details>
+    <details><summary>Is Kosh an alternative to 1Password, Bitwarden, or HashiCorp Vault?</summary><p>For a specific job, yes. Kosh is the choice when you need no account, no cloud, a provable air-gap, and a tamper-evident local reveal history for keys that should live only on your laptop. It does not do team sync, mobile apps, or browser autofill.</p></details>
+    <details><summary>How does Kosh encrypt my secrets?</summary><p>Envelope encryption: your master password derives a Key-Encryption-Key with Argon2id (memory-hard), which wraps a random Data-Encryption-Key that seals every value with XChaCha20-Poly1305 AEAD. Nothing is stored in plaintext.</p></details>
+    <details><summary>Which platforms does Kosh support?</summary><p>Windows 10/11, macOS, and Linux (Debian/Ubuntu <code>.deb</code> plus a portable binary) — one identical, cross-platform desktop app.</p></details>
+    <details><summary>Where does Kosh store my data?</summary><p>In a single encrypted <code>vault.db</code> in your OS user-data directory — never in the cloud and never inside the install folder, so upgrades never touch your secrets.</p></details>
+  </div>
+</section>
+
+<section id="get" style="text-align:center">
+  <div class="wrap">
+    <h2>Get Kosh</h2>
+    <p class="lead" style="margin-left:auto;margin-right:auto">Free, open source, and ready for Windows, macOS, and Linux.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/deepakvamsi/kosh/releases/latest">⬇ Download the latest release</a>
+      <a class="btn ghost" href="https://github.com/deepakvamsi/kosh">View source on GitHub</a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><strong>Kosh</strong> — offline, air-sealed secrets &amp; API-key manager · Built in Go + Wails · Apache-2.0</p>
+    <p>This page makes no third-party tracking calls. · <a href="https://github.com/deepakvamsi/kosh">github.com/deepakvamsi/kosh</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
